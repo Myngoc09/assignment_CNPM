@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 # assignment_CNPM
 =======
 # BrewLite
