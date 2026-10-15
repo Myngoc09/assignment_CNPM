@@ -7,21 +7,21 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gray-50">
-        <h2 className="text-2xl font-bold mb-4 text-gray-800">Giỏ hàng của bạn đang trống</h2>
-        <p className="text-gray-500 mb-6">Hãy quay lại menu để chọn những ly đồ uống yêu thích nhé!</p>
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#FDFBF7] text-[#1C2A24]">
+        <h2 className="text-2xl font-bold mb-4">Giỏ hàng của bạn đang trống</h2>
+        <p className="text-gray-500 mb-6">Hãy quay lại thực đơn để chọn những ly đồ uống yêu thích nhé!</p>
         <Link 
           href="/" 
-          className="bg-amber-700 hover:bg-amber-800 text-white font-semibold px-6 py-3 rounded-lg shadow transition"
+          className="bg-[#1C2A24] hover:bg-[#2c3e36] text-white font-semibold px-6 py-3 rounded-lg shadow transition"
         >
-          Xem Menu
+          Xem Thực đơn
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-xl mt-8">
+    <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-xl mt-8 mb-20">
       <div className="flex justify-between items-center border-b pb-4 mb-4">
         <h1 className="text-2xl font-bold text-gray-800">Giỏ hàng của bạn</h1>
         <button 

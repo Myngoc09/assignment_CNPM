@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-
+import Link from 'next/link';
+import { useCartStore } from '@/store/useCartStore';
 import ProductModal, {
   type Product,
 } from './components/ProductModal';
@@ -14,13 +15,15 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('Tất cả');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [cartCount, setCartCount] = useState(0);
   const [notice, setNotice] = useState('');
+
+  // Lấy các hàm từ Zustand store
+  const addToCart = useCartStore((state) => state.addToCart);
+  const getTotalItems = useCartStore((state) => state.getTotalItems);
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        // thử đổi cổng sang 3000( ban đầu là 3001)^^
         const res = await fetch('http://localhost:3001/products');
         if (!res.ok) throw new Error('Không thể tải dữ liệu thực đơn từ server');
         const data: Product[] = await res.json();
@@ -41,23 +44,30 @@ export default function HomePage() {
     return product.category.toLowerCase() === selectedCategory.toLowerCase();
   });
 
+  // Xử lý thêm vào giỏ hàng thông qua Zustand
   const handleAddToCart = (
-  product: Product,
-  size: string,
-  toppings: string[],
-  totalPrice: number,
-) => {
-  setCartCount((count) => count + 1);
+    product: Product,
+    size: string,
+    toppings: string[],
+    totalPrice: number,
+  ) => {
+    const cartItemId = `${product.id}-${size}-${toppings.sort().join('-')}`;
+    
+    addToCart({
+      id: cartItemId,
+      productId: product.id,
+      name: product.name,
+      price: totalPrice,
+      size: size as 'S' | 'M' | 'L',
+      topping: toppings.length > 0 ? toppings.join(', ') : undefined,
+      qty: 1,
+      imageUrl: product.imageUrl,
+    });
 
-  setNotice(
-    `Đã thêm ${product.name} size ${size} vào giỏ hàng. Giá: ${totalPrice.toLocaleString('vi-VN')}đ`,
-  );
-
-  console.log('Sản phẩm:', product.name);
-  console.log('Size:', size);
-  console.log('Topping:', toppings);
-  console.log('Tổng tiền:', totalPrice);
-};
+    setNotice(
+      `Đã thêm ${product.name} size ${size} vào giỏ hàng. Giá: ${totalPrice.toLocaleString('vi-VN')}₫`,
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] text-[#1C2A24] flex flex-col items-center pb-24 font-sans">
@@ -118,21 +128,20 @@ export default function HomePage() {
                 Chưa có món thuộc danh mục này
               </p>
             ) : (
-            filteredProducts.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => setSelectedProduct(item)}
-                className="bg-white rounded-3xl p-3.5 flex items-center gap-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-gray-100 hover:shadow-md transition cursor-pointer"
-              >
-                {/* Hình ảnh từ Unsplash URL trong script backend */}
-                <div className="w-20 h-24 rounded-2xl bg-gray-100 flex-shrink-0 overflow-hidden relative">
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                  {/* Thông tin món */}
+              filteredProducts.map((item) => (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedProduct(item)}
+                  className="bg-white rounded-3xl p-3.5 flex items-center gap-4 shadow-[0_2px_10px_rgba(0,0,0,0.03)] border border-gray-100 hover:shadow-md transition cursor-pointer"
+                >
+                  <div className="w-20 h-24 rounded-2xl bg-gray-100 flex-shrink-0 overflow-hidden relative">
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  
                   <div className="flex-1 min-w-0">
                     <h3 className="font-serif font-semibold text-base text-[#1C2A24] truncate">
                       {item.name}
@@ -149,7 +158,6 @@ export default function HomePage() {
                     </p>
                   </div>
 
-                  {/* Nút thêm (+) */}
                   <button
                     type="button"
                     onClick={(event) => {
@@ -159,18 +167,8 @@ export default function HomePage() {
                     aria-label={`Chọn ${item.name}`}
                     className="w-9 h-9 rounded-full bg-[#1C2A24] text-white flex items-center justify-center hover:bg-[#2c3e36] active:scale-95 transition flex-shrink-0"
                   >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 4v16m8-8H4"
-                      />
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                   </button>
                 </div>
@@ -179,38 +177,38 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Bottom Navigation Bar */}
+        {/* Bottom Navigation Bar - Đã bọc Link chuyển trang chính xác */}
         <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 py-3 px-6 flex justify-between items-center shadow-lg z-50">
-          <button className="flex flex-col items-center gap-1 text-[#1C2A24]">
+          <Link href="/" className="flex flex-col items-center gap-1 text-[#1C2A24]">
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
               <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
             </svg>
             <span className="text-[11px] font-bold">Thực đơn</span>
             <span className="w-1 h-1 rounded-full bg-[#B58A59]"></span>
-          </button>
+          </Link>
 
-          <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600">
+          <Link href="/cart" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 relative">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 11h14l1 12H4L5 11z" />
             </svg>
             <span className="text-[11px]">
-              Giỏ hàng ({cartCount})
+              Giỏ hàng ({getTotalItems()})
             </span>
-          </button>
+          </Link>
 
-          <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600">
+          <Link href="/orders" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <span className="text-[11px]">Đơn hàng</span>
-          </button>
+          </Link>
 
-          <button className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600">
+          <Link href="/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
             <span className="text-[11px]">Tài khoản</span>
-          </button>
+          </Link>
         </nav>
 
         {/* Modal chi tiết sản phẩm */}
@@ -228,7 +226,6 @@ export default function HomePage() {
           >
             <div className="flex items-start justify-between gap-3">
               <p>{notice}</p>
-
               <button
                 type="button"
                 onClick={() => setNotice('')}
