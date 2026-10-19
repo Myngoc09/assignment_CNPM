@@ -16,4 +16,7 @@ export class Product {
 
   @Column({ default: 100 })
   stock: number;
+  
+  @Column({ nullable: true })
+  category: string;
 }

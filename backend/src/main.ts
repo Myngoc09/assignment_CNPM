@@ -18,6 +18,6 @@ async function bootstrap() {
   );
 
   // 3. Lắng nghe port
-  await app.listen(process.env.PORT ?? 3001);
+  await app.listen(process.env.PORT ?? 3001, '0.0.0.0');
 }
 void bootstrap();

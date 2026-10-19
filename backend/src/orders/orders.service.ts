@@ -19,7 +19,7 @@ export class OrdersService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async createOrder(dto: CreateOrderDto) {
+  async createOrder(dto: CreateOrderDto, userId: string) {
     // 1. Lấy danh sách productId (loại trùng)
     const productIds = [...new Set(dto.items.map((i) => i.productId))];
 
@@ -73,7 +73,7 @@ export class OrdersService {
 
     try {
       const order = queryRunner.manager.create(Order, {
-        userId: dto.userId || undefined, // Task 7: đổi sang lấy từ JWT
+        userId,
         status: OrderStatus.PENDING,
         total: orderTotal,
       });
