@@ -25,8 +25,9 @@ export class Order {
   @Column({ nullable: true })
   userId?: string;
 
+  // 🛠️ ĐÃ SỬA: Đổi 'simple-enum' thành 'enum' chuẩn cho PostgreSQL
   @Column({
-    type: 'simple-enum',
+    type: 'enum',
     enum: OrderStatus,
     default: OrderStatus.PENDING,
   })
