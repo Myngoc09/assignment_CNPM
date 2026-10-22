@@ -1,30 +1,52 @@
+# Task 6 – PostgreSQL + TypeORM
 
-# assignment_CNPM
-=======
-# BrewLite
+# Nội dung
 
-Website đặt cà phê trực tuyến.
+Chuyển database từ SQLite sang PostgreSQL.
 
-## Công nghệ sử dụng
+Sử dụng TypeORM để quản lý database.
 
-### Frontend
-- Next.js
-- TypeScript
-- Tailwind CSS
+Chạy PostgreSQL bằng Docker.
 
-### Backend
-- NestJS
-- TypeScript
+Seed 4 sản phẩm mẫu.
 
-### Database
-- PostgreSQL
+Xây dựng API sản phẩm và tạo đơn hàng.
 
-## Cấu trúc dự án
+Tính giá theo size và topping.
 
-```text
-BrewLite/
-├── frontend/
-├── backend/
-├── .gitignore
-└── README.md
->>>>>>> feature/My
+Kiểm tra tồn kho khi đặt hàng.
+
+Trạng thái đơn hàng ban đầu: PENDING.
+
+# Công nghệ
+
+NestJS
+
+TypeScript
+
+TypeORM
+
+PostgreSQL 16
+
+Docker
+
+# Chạy project
+
+docker compose up -d
+cd backend
+npm install
+npm run start:dev
+
+# Backend:
+
+http://localhost:3001
+
+# API chính
+
+GET  /products
+GET  /products/:id
+POST /orders
+
+# Test
+
+Có thể sử dụng Thunder Client để kiểm tra các API trên.

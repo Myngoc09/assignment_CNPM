@@ -13,12 +13,15 @@ import {
 export const SIZES = ['S', 'M', 'L'] as const;
 export type SizeType = (typeof SIZES)[number];
 
-// BẢNG GIÁ TOPPING (Đã có chữ export để file service gọi sang được)
-export const TOPPING_PRICE: Record<string, number> = {
-  TRAN_CHAU: 5000,
-  KEM: 5000,
-  // Bạn có thể thêm các loại topping khác ở đây nếu cần
-};
+export const TOPPINGS = [
+  { name: 'Trân châu', price: 5000 },
+  { name: 'Kem cheese', price: 10000 },
+  { name: 'Thạch cà phê', price: 5000 },
+];
+
+export const TOPPING_PRICE: Record<string, number> = Object.fromEntries(
+  TOPPINGS.map((topping) => [topping.name, topping.price]),
+);
 
 export class CreateOrderItemDto {
   @IsString({ message: 'productId phải là chuỗi' })
@@ -32,7 +35,10 @@ export class CreateOrderItemDto {
   @ArrayUnique()
   @ArrayMaxSize(5)
   @IsString({ each: true })
-  @IsIn(Object.keys(TOPPING_PRICE), { each: true, message: 'topping không hợp lệ' })
+  @IsIn(Object.keys(TOPPING_PRICE), {
+    each: true,
+    message: 'topping không hợp lệ',
+  })
   toppings?: string[];
 
   @IsInt()

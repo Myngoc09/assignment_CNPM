@@ -1,46 +1,3 @@
-// import { Injectable } from '@nestjs/common';
-
-// @Injectable()
-// export class ProductsService {
-//   private readonly products = [
-//     {
-//       id: '1',
-//       name: 'Cà Phê Muối brewlite',
-//       category: 'Cà Phê',
-//       rating: 4.8,
-//       price: 45000,
-//       imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772',
-//     },
-//     {
-//       id: '2',
-//       name: 'Trà Đào Cam Sả',
-//       category: 'Trà',
-//       rating: 4.8,
-//       price: 50000,
-//       imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc',
-//     },
-//     {
-//       id: '3',
-//       name: 'Bánh Croissant Bơ Tươi',
-//       category: 'Bánh Ngọt',
-//       rating: 4.8,
-//       price: 38000,
-//       imageUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a',
-//     },
-//     {
-//       id: '4',
-//       name: 'Matcha Latte Uji',
-//       category: 'Trà',
-//       rating: 4.8,
-//       price: 55000,
-//       imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213',
-//     },
-//   ];
-
-//   findAll() {
-//     return this.products;
-//   }
-// }
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -54,7 +11,7 @@ export class ProductsService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Luôn tự động cập nhật / thêm mới danh sách 4 sản phẩm vào SQLite mỗi khi khởi động
+    // Tự động thêm/cập nhật 4 sản phẩm mẫu vào PostgreSQL khi ứng dụng khởi động
     await this.productRepository.save([
       {
         id: '1',
@@ -62,7 +19,8 @@ export class ProductsService implements OnModuleInit {
         category: 'Cà Phê',
         rating: 4.8,
         price: 45000,
-        imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772',
+        imageUrl:
+          'https://images.unsplash.com/photo-1541167760496-1628856ab772',
         stock: 100,
       },
       {
@@ -71,7 +29,8 @@ export class ProductsService implements OnModuleInit {
         category: 'Trà',
         rating: 4.8,
         price: 50000,
-        imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc',
+        imageUrl:
+          'https://images.unsplash.com/photo-1556679343-c7306c1976bc',
         stock: 100,
       },
       {
@@ -80,7 +39,8 @@ export class ProductsService implements OnModuleInit {
         category: 'Bánh Ngọt',
         rating: 4.8,
         price: 38000,
-        imageUrl: 'https://images.unsplash.com/photo-1555507036-ab1f4038808a',
+        imageUrl:
+          'https://images.unsplash.com/photo-1555507036-ab1f4038808a',
         stock: 100,
       },
       {
@@ -89,14 +49,22 @@ export class ProductsService implements OnModuleInit {
         category: 'Trà',
         rating: 4.8,
         price: 55000,
-        imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213',
+        imageUrl:
+          'https://images.unsplash.com/photo-1534778101976-62847782c213',
         stock: 100,
       },
     ]);
-    console.log('✅ Đã đồng bộ đầy đủ 4 sản phẩm vào SQLite!');
+
+    console.log('✅ Đã đồng bộ 4 sản phẩm vào PostgreSQL!');
   }
 
   async findAll() {
     return await this.productRepository.find();
   }
+
+  async findOne(id: string) {
+  return await this.productRepository.findOne({
+    where: { id },
+  });
+}
 }

@@ -1,12 +1,19 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+
+import { Entity, PrimaryColumn, Column } from 'typeorm';
 
 @Entity('products')
 export class Product {
-  @PrimaryGeneratedColumn('uuid')
+  @PrimaryColumn({ type: 'varchar' })
   id: string;
 
   @Column()
   name: string;
+
+  @Column()
+  category: string;
+
+  @Column('float')
+  rating: number;
 
   @Column('float')
   price: number;
@@ -16,7 +23,4 @@ export class Product {
 
   @Column({ default: 100 })
   stock: number;
-  
-  @Column({ nullable: true })
-  category: string;
 }
