@@ -36,7 +36,7 @@ export class User {
   @Column({ type: 'text', nullable: true })
   resetPasswordToken: string | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   resetPasswordExpires: Date | null;
 
   @CreateDateColumn()
