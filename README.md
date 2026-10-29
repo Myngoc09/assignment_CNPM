@@ -1,30 +1,16 @@
+# Task 5 – Giỏ hàng (Cart)
 
-# assignment_CNPM
-=======
-# BrewLite
+# Nội dung
+Thêm sản phẩm
+Cập nhật số lượng
+Xóa sản phẩm
+Tính tổng tiền
+Quản lý trạng thái
+Hiển thị số lượng
 
-Website đặt cà phê trực tuyến.
-
-## Công nghệ sử dụng
-
-### Frontend
-- Next.js
-- TypeScript
-- Tailwind CSS
-
-### Backend
-- NestJS
-- TypeScript
-
-### Database
-- PostgreSQL
-
-## Cấu trúc dự án
-
-```text
-BrewLite/
-├── frontend/
-├── backend/
-├── .gitignore
-└── README.md
->>>>>>> feature/My
+# Công nghệ
+Next.js
+React
+TypeScript
+Tailwind CSS
+JavaScript
