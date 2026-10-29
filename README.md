@@ -1,30 +1,39 @@
+# Task 4 – Chi tiết và tùy chọn sản phẩm
 
-# assignment_CNPM
-=======
-# BrewLite
+## Nội dung
 
-Website đặt cà phê trực tuyến.
+- Xây dựng màn hình chi tiết sản phẩm.
+- Cho phép chọn size S/M/L.
+- Cho phép lựa chọn topping.
+- Tính giá sản phẩm theo size và topping đã chọn.
+- Hiển thị thông tin sản phẩm và giá tương ứng với các tùy chọn.
 
-## Công nghệ sử dụng
+## Công nghệ
 
-### Frontend
 - Next.js
+- React
 - TypeScript
 - Tailwind CSS
 
-### Backend
-- NestJS
-- TypeScript
+## Chạy project
 
-### Database
-- PostgreSQL
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## Cấu trúc dự án
+## Frontend
 
-```text
-BrewLite/
-├── frontend/
-├── backend/
-├── .gitignore
-└── README.md
->>>>>>> feature/My
+http://localhost:3000
+
+## Chức năng chính
+
+- Xem chi tiết sản phẩm.
+- Chọn size sản phẩm.
+- Chọn topping.
+- Cập nhật giá theo tùy chọn.
+
+## Kiểm thử
+
+Kiểm tra giao diện chi tiết sản phẩm, các tùy chọn size và topping, đồng thời xác nhận giá thay đổi chính xác khi lựa chọn các tùy chọn khác nhau.
