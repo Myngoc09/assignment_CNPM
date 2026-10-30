@@ -42,6 +42,37 @@ export default function HomePage() {
     fetchProducts();
   }, []);
 
+  useEffect(() => {
+    const restoreCart = async () => {
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        setCartUserId(null);
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:3001/auth/profile', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error('Phien dang nhap het han.');
+        }
+
+        const profile = await response.json();
+        setCartUserId(profile.id);
+      } catch {
+        localStorage.removeItem('access_token');
+        setCartUserId(null);
+      }
+    };
+
+    restoreCart();
+  }, [setCartUserId]);
+
   // Lọc danh sách món ăn theo Filter Danh mục
   const filteredProducts = products.filter((product) => {
     if (selectedCategory === 'Tất cả') return true;
