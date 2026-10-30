@@ -1,9 +1,11 @@
 
 'use client';
 
+import type { CartItem } from '@/store/useCartStore';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useCartStore } from '@/store/useCartStore';
 
 type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say' | '';
 
@@ -20,6 +22,7 @@ type Profile = {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const setCartUserId = useCartStore((state) => state.setUserId);
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [fullName, setFullName] = useState('');
@@ -58,6 +61,7 @@ export default function ProfilePage() {
     const token = localStorage.getItem('access_token');
 
     if (!token) {
+      setCartUserId(null);
       setCheckingProfile(false);
       return;
     }
@@ -76,10 +80,12 @@ export default function ProfilePage() {
       })
       .then((data: Profile) => {
         setProfile(data);
+        setCartUserId(data.id);
       })
       .catch(() => {
         localStorage.removeItem('access_token');
         setProfile(null);
+        setCartUserId(null);
       })
       .finally(() => {
         setCheckingProfile(false);
@@ -261,12 +267,34 @@ export default function ProfilePage() {
       }
 
       if (mode === 'login') {
-        if (!data.access_token) {
-          throw new Error('Chua nhan duoc JWT tu may chu.');
+        if (!data.access_token || !data.user?.id) {
+          throw new Error('Khong nhan duoc thong tin tai khoan tu may chu.');
         }
 
         localStorage.setItem('access_token', data.access_token);
-        router.push('/');
+
+        setCartUserId(data.user.id);
+
+        // Lay san pham dang cho trong qua trinh dang nhap
+        const pendingItem = sessionStorage.getItem('pending_cart_item');
+
+        if (pendingItem) {
+          try {
+            const cartItem: CartItem = JSON.parse(pendingItem);
+
+            useCartStore.getState().addToCart(cartItem);
+
+            sessionStorage.removeItem('pending_cart_item');
+
+            router.push('/cart');
+          } catch {
+            setMessageType('error');
+            setMessage('Khong the them san pham vao gio hang.');
+            router.push('/');
+          }
+        } else {
+          router.push('/');
+        }
       } else {
         setMessageType('success');
         setMessage('Dang ky thanh cong! Ba co the dang nhap.');
@@ -297,6 +325,7 @@ export default function ProfilePage() {
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
+    setCartUserId(null);
     setProfile(null);
     setEditing(false);
     setMessage('');
@@ -473,9 +502,6 @@ export default function ProfilePage() {
                       <option value="male">Nam</option>
                       <option value="female">Nữ</option>
                       <option value="other">Khác</option>
-                      <option value="prefer_not_to_say">
-                        Không muốn tiết lộ
-                      </option>
                     </select>
                   </div>
 
