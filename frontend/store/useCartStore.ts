@@ -1,7 +1,9 @@
+
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export interface CartItem {
-  id: string; // id duy nhất cho mục trong giỏ (kết hợp productId + size + topping)
+  id: string;
   productId: string;
   name: string;
   price: number;
@@ -21,44 +23,72 @@ interface CartState {
   getTotalPrice: () => number;
 }
 
-export const useCartStore = create<CartState>((set, get) => ({
-  items: [],
-  
-  addToCart: (newItem) => {
-    set((state) => {
-      const existingIndex = state.items.findIndex(
-        (item) => item.productId === newItem.productId && item.size === newItem.size && item.topping === newItem.topping
-      );
-      if (existingIndex > -1) {
-        const updatedItems = [...state.items];
-        updatedItems[existingIndex].qty += newItem.qty;
-        return { items: updatedItems };
-      }
-      return { items: [...state.items, newItem] };
-    });
-  },
+export const useCartStore = create<CartState>()(
+  persist(
+    (set, get) => ({
+      items: [],
 
-  removeFromCart: (id) => {
-    set((state) => ({
-      items: state.items.filter((item) => item.id !== id),
-    }));
-  },
+      addToCart: (newItem) => {
+        set((state) => {
+          const existingIndex = state.items.findIndex(
+            (item) =>
+              item.productId === newItem.productId &&
+              item.size === newItem.size &&
+              item.topping === newItem.topping
+          );
 
-  updateQty: (id, qty) => {
-    set((state) => ({
-      items: state.items.map((item) => 
-        item.id === id ? { ...item, qty: Math.max(1, qty) } : item
-      ),
-    }));
-  },
+          if (existingIndex > -1) {
+            const updatedItems = [...state.items];
+            updatedItems[existingIndex] = {
+              ...updatedItems[existingIndex],
+              qty: updatedItems[existingIndex].qty + newItem.qty,
+            };
 
-  clearCart: () => set({ items: [] }),
+            return { items: updatedItems };
+          }
 
-  getTotalItems: () => {
-    return get().items.reduce((total, item) => total + item.qty, 0);
-  },
+          return { items: [...state.items, newItem] };
+        });
+      },
 
-  getTotalPrice: () => {
-    return get().items.reduce((total, item) => total + item.price * item.qty, 0);
-  },
-}));
+      removeFromCart: (id) => {
+        set((state) => ({
+          items: state.items.filter((item) => item.id !== id),
+        }));
+      },
+
+      updateQty: (id, qty) => {
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.id === id
+              ? { ...item, qty: Math.max(1, qty) }
+              : item
+          ),
+        }));
+      },
+
+      clearCart: () => set({ items: [] }),
+
+      getTotalItems: () => {
+        return get().items.reduce(
+          (total, item) => total + item.qty,
+          0
+        );
+      },
+
+      getTotalPrice: () => {
+        return get().items.reduce(
+          (total, item) => total + item.price * item.qty,
+          0
+        );
+      },
+    }),
+    {
+      name: 'brewlite-cart-storage',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        items: state.items,
+      }),
+    }
+  )
+);
