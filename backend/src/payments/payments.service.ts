@@ -1,9 +1,9 @@
-
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 
@@ -25,7 +25,6 @@ import {
 
 import {
   Payment,
-  PaymentMethod,
   PaymentProvider,
   PaymentStatus,
 } from './entities/payment.entity';
@@ -43,6 +42,8 @@ interface MockBankResponse {
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
+
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
@@ -162,6 +163,12 @@ export class PaymentsService {
         bankResponse,
       );
     } catch (error) {
+      // Log nguyên nhân thật để debug (xem ở terminal NestJS).
+      this.logger.error(
+        `Thanh toán ${pendingPayment.paymentId} lỗi`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
       // Nếu Mock Bank lỗi hoặc trả kết quả không hợp lệ,
       // không được tự ý đánh dấu đơn hàng đã thanh toán.
       await this.markPaymentFailed(
@@ -229,7 +236,7 @@ export class PaymentsService {
       );
     }
 
-    return await response.json() as MockBankResponse;
+    return (await response.json()) as MockBankResponse;
   }
 
   // =====================================================
