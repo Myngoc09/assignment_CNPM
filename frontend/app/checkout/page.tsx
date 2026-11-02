@@ -1,74 +1,67 @@
 'use client';
-
-import { useState } from 'react';
+import axios from 'axios';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCartStore } from '@/store/useCartStore'; // Import Zustand store hoặc context giỏ hàng của dự án
+import { useCartStore } from '@/store/useCartStore';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, totalPrice, clearCart } = useCartStore(); // Lấy dữ liệu giỏ hàng
+  const { items, getTotalPrice, clearCart } = useCartStore();
   
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET');
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentOrderId, setCurrentOrderId] = useState<string>('');
   const [paymentSuccess, setPaymentSuccess] = useState<{
     orderId: string;
     status: string;
   } | null>(null);
 
+  // [Chức năng] Đọc orderId an toàn sau khi component mount (tránh lỗi SSR Hydration)
+  useEffect(() => {
+    const orderId = localStorage.getItem('current_order_id') || '';
+    setCurrentOrderId(orderId);
+  }, []);
+
   // Tính tổng tiền đơn hàng
-  const totalAmount = totalPrice ? totalPrice() : 0;
+  const totalAmount = getTotalPrice ? getTotalPrice() : 0;
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
   const handlePayment = async () => {
-    setLoading(true);
-    setErrorMessage(null);
-
     try {
-      // 1. Lấy token xác thực từ localStorage hoặc cookies
+      setLoading(true);
+      setErrorMessage(null);
+
       const token = localStorage.getItem('access_token');
-      if (!token) {
-        setErrorMessage('Vui lòng đăng nhập để thực hiện thanh toán.');
-        setLoading(false);
-        return;
+      const orderId = currentOrderId || localStorage.getItem('current_order_id');
+
+      if (!orderId) {
+        throw new Error('Không tìm thấy đơn hàng. Vui lòng quay lại giỏ hàng.');
       }
 
-      // Giả sử đã có orderId từ bước tạo đơn trước đó hoặc truyền qua context/state
-      const currentOrderId = localStorage.getItem('current_order_id') || 'ORDER-TEST-001';
-
-      // 2. Gọi API Backend POST /payments
-      // LƯU Ý: Đối chiếu file backend/src/payments/dto/create-payment.dto.ts trước khi chốt body
-      const response = await fetch('http://localhost:3001/payments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          orderId: currentOrderId,
+      const paymentRes = await axios.post(
+        `${API_URL}/payments`,
+        {
+          orderId,
           method: paymentMethod,
-          provider: paymentMethod, // Hoặc theo quy định trong DTO backend
-        }),
-      });
+          provider: 'MOCK',
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-      const data = await response.json();
+      const { data } = paymentRes;
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Thanh toán thất bại. Vui lòng thử lại.');
-      }
-
-      // 3. Xử lý khi thanh toán thành công
-      if (data.status === 'PAID' || data.paymentStatus === 'PAID') {
-        setPaymentSuccess({
-          orderId: data.orderId || currentOrderId,
-          status: 'PAID',
-        });
-        clearCart(); // Xóa giỏ hàng sau khi thanh toán thành công
+      if (data.status === 'PAID') {
+        setPaymentSuccess({ orderId: data.orderId, status: data.status });
+        localStorage.removeItem('current_order_id');
+        clearCart();
       } else {
-        setErrorMessage('Thanh toán không hoàn tất hoặc đang chờ xử lý.');
+        setErrorMessage(data.message || 'Thanh toán thất bại, vui lòng thử lại.');
       }
-    } catch (err: any) {
-      // 4. Xử lý khi thất bại (Giữ nguyên giỏ hàng để khách thử lại)
-      setErrorMessage(err.message || 'Có lỗi xảy ra trong quá trình thanh toán.');
+    } catch (error: any) {
+      setErrorMessage(
+        error.response?.data?.message || error.message || 'Thanh toán thất bại, vui lòng thử lại.'
+      );
     } finally {
       setLoading(false);
     }
@@ -100,12 +93,23 @@ export default function CheckoutPage() {
         <h2 className="text-lg font-semibold mb-3 border-b pb-2">Đơn hàng của bạn</h2>
         {items && items.length > 0 ? (
           <ul className="divide-y">
-            {items.map((item: any) => (
-              <li key={item.id} className="py-2 flex justify-between">
-                <span>{item.name} (x{item.quantity})</span>
-                <span className="font-medium">{(item.price * item.quantity).toLocaleString('vi-VN')} đ</span>
-              </li>
-            ))}
+            {items.map((item: any, index: number) => {
+              // Sửa lại cách lấy số lượng và giá an toàn tránh lỗi NaN
+              const quantity = Number(item.qty || item.quantity || 1);
+              const price = Number(item.price || 0);
+              const uniqueKey = `${item.id}-${item.size || 'M'}-${index}`;
+
+              return (
+                <li key={uniqueKey} className="py-2 flex justify-between">
+                  <span>
+                    {item.name} (x{quantity}) {item.size ? `- Size: ${item.size}` : ''}
+                  </span>
+                  <span className="font-medium">
+                    {(price * quantity).toLocaleString('vi-VN')} đ
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="text-gray-500">Giỏ hàng trống.</p>
@@ -114,7 +118,9 @@ export default function CheckoutPage() {
           <span>Tổng tiền:</span>
           <span className="text-blue-600">{totalAmount.toLocaleString('vi-VN')} đ</span>
         </div>
-      </div>
+      
+        </div>
+      
 
       {/* Chọn phương thức thanh toán */}
       <div className="mb-6">
@@ -169,4 +175,4 @@ export default function CheckoutPage() {
       </button>
     </div>
   );
-}
+} 
