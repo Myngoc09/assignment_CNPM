@@ -7,6 +7,7 @@ import {
   HttpStatus,
   UseGuards,
   Request,
+  Get,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -25,6 +26,15 @@ export class OrdersController {
   ) {
     return this.ordersService.createOrder(
       createOrderDto,
+      req.user.userId,
+    );
+  }
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMyOrders(
+    @Request() req: { user: { userId: string; email: string } },
+  ) {
+    return this.ordersService.getMyOrders(
       req.user.userId,
     );
   }
