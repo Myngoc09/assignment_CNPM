@@ -8,7 +8,9 @@ import Link from 'next/link';
 const LOGIN_PATH = '/';
 
 // Nên đưa vào .env.local: NEXT_PUBLIC_API_URL=http://192.168.1.224:3001
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://192.168.1.224:3001';
+//const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://192.168.1.224:3001';
+  const API_URL =
+    process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();

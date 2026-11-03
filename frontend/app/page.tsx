@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useCartStore } from '@/store/useCartStore';
@@ -10,6 +11,9 @@ import ProductModal, {
 const CATEGORIES = ['Tất cả', 'Cà Phê', 'Trà', 'Bánh Ngọt'];
 
 export default function HomePage() {
+  const router = useRouter();
+
+  const setCartUserId = useCartStore((state) => state.setUserId);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,16 +49,14 @@ export default function HomePage() {
   });
 
   // Xử lý thêm vào giỏ hàng thông qua Zustand
-  const handleAddToCart = (
+  const handleAddToCart = async (
     product: Product,
     size: string,
     toppings: string[],
     totalPrice: number,
   ) => {
-    const cartItemId = `${product.id}-${size}-${toppings.sort().join('-')}`;
-    
-    addToCart({
-      id: cartItemId,
+    const cartItem = {
+      id: `${product.id}-${size}-${[...toppings].sort().join('-')}`,
       productId: product.id,
       name: product.name,
       price: totalPrice,
@@ -62,11 +64,51 @@ export default function HomePage() {
       topping: toppings.length > 0 ? toppings.join(', ') : undefined,
       qty: 1,
       imageUrl: product.imageUrl,
-    });
+    };
 
-    setNotice(
-      `Đã thêm ${product.name} size ${size} vào giỏ hàng. Giá: ${totalPrice.toLocaleString('vi-VN')}₫`,
-    );
+    const token = localStorage.getItem('access_token');
+
+    // Chua dang nhap: luu san pham tam thoi va chuyen den trang dang nhap
+    if (!token) {
+      sessionStorage.setItem('pending_cart_item', JSON.stringify(cartItem));
+      setSelectedProduct(null);
+      router.push('/profile');
+      return;
+    }
+
+    try {
+      // Lay thong tin tai khoan hien tai
+      const response = await fetch('http://localhost:3001/auth/profile', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Phien dang nhap het han. Vui long dang nhap lai.');
+      }
+
+      const profile = await response.json();
+
+      // Nap gio hang cua dung tai khoan
+      setCartUserId(profile.id);
+
+      // Them san pham vao gio hang
+      addToCart(cartItem);
+
+      setNotice(
+        `Đã thêm ${product.name} size ${size} vào giỏ hàng. Giá: ${totalPrice.toLocaleString('vi-VN')}₫`,
+      );
+    } catch (error) {
+      localStorage.removeItem('access_token');
+      setCartUserId(null);
+
+      // Giu lai san pham de them sau khi dang nhap lai
+      sessionStorage.setItem('pending_cart_item', JSON.stringify(cartItem));
+
+      setSelectedProduct(null);
+      router.push('/profile');
+    }
   };
 
   return (

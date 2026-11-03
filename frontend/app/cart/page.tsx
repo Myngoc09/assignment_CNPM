@@ -1,9 +1,79 @@
 'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/useCartStore';
 import Link from 'next/link';
 
 export default function CartPage() {
+  const router = useRouter();
   const { items, updateQty, removeFromCart, getTotalPrice, clearCart } = useCartStore();
+  const [loading, setLoading] = useState(false);
+
+  // [Chức năng mới] Gọi API POST /orders trước khi sang trang /checkout
+  const handleProceedToCheckout = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        alert('Vui lòng đăng nhập trước khi thanh toán!');
+        router.push('/login');
+        return;
+      }
+
+      if (!items || items.length === 0) {
+        alert('Giỏ hàng của bạn đang trống!');
+        return;
+      }
+
+      // 1. Map dữ liệu chuẩn hóa, tách lấy ID gốc ("1", "2", "3", "4") để khớp DB PostgreSQL
+      const orderPayload = {
+        items: items.map((item: any) => ({
+          productId: String(item.productId || item.id).split('-')[0], 
+          size: item.size || 'M',
+          toppings: item.toppings ? (Array.isArray(item.toppings) ? item.toppings : [item.toppings]) : [],
+          qty: Number(item.qty || 1),
+        })),
+      };
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+      // 2. Gửi request tạo Order lên NestJS Backend
+      const response = await fetch(`${API_URL}/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(orderPayload),
+      });
+
+      const data = await response.json();
+      
+      // [QUAN TRỌNG] In ra console để kiểm tra cấu trúc thực tế server trả về
+      console.log('Phản hồi từ API POST /orders:', data);
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Không thể tạo đơn hàng.');
+      }
+
+      // 3. Hứng linh hoạt các trường hợp tên biến id mà backend có thể trả về
+      const newOrderId = data.id || data.orderId || data._id || (data.data && data.data.id);
+      
+      if (!newOrderId) {
+        throw new Error('Server không trả về mã định danh đơn hàng (orderId).');
+      }
+
+      localStorage.setItem('current_order_id', newOrderId);
+      router.push('/checkout');
+
+    } catch (err: any) {
+      console.error('Lỗi tạo đơn hàng:', err);
+      alert(err.message || 'Có lỗi xảy ra, vui lòng thử lại.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (items.length === 0) {
     return (
@@ -94,12 +164,15 @@ export default function CartPage() {
         >
           Chọn thêm món
         </Link>
-        <Link 
-          href="/checkout" 
-          className="flex-1 text-center bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg shadow transition"
+        
+        {/* Nút thanh toán đã được thay bằng button gọi API tạo Order */}
+        <button 
+          onClick={handleProceedToCheckout}
+          disabled={loading}
+          className="flex-1 text-center bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg shadow transition disabled:bg-gray-400"
         >
-          Tiến hành thanh toán
-        </Link>
+          {loading ? 'Đang khởi tạo đơn hàng...' : 'Tiến hành thanh toán'}
+        </button>
       </div>
     </div>
   );
