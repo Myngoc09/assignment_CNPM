@@ -29,6 +29,7 @@ export class OrdersController {
       req.user.userId,
     );
   }
+  // Lấy danh sách đơn hàng của user hiện tại
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async getMyOrders(
