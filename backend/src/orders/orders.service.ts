@@ -60,9 +60,11 @@ export class OrdersService {
 
       orderItemsData.push({
         productId: item.productId,
+        productName: product.name,
         size: item.size,
         toppings,
         qty: item.qty,
+        unitPrice,
         lineTotal,
       });
     }
@@ -106,6 +108,11 @@ export class OrdersService {
   async getMyOrders(userId: string) {
     const orders = await this.orderRepository.find({
       where: { userId },
+
+      // Lấy danh sách sản phẩm thuộc từng đơn hàng
+      relations: {
+        items: true,
+    },
       order: {
       createdAt: 'DESC',
     },
@@ -114,7 +121,18 @@ export class OrdersService {
         status: true,
         total: true,
         createdAt: true,
+
+        items: {
+          id: true,
+          productId: true,
+          productName: true,
+          size: true,
+          toppings: true,
+          qty: true,
+          unitPrice: true,
+          lineTotal: true,
     },
+  }
     });
 
   return {
