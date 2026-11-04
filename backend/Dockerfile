@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package*.json ./
 
 # Cài tất cả thư viện
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Sao chép mã nguồn
 COPY . .
@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Chỉ giữ lại thư viện cần thiết khi chạy
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev --legacy-peer-deps
 
 
 # Giai đoạn 2: Chạy Backend
