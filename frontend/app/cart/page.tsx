@@ -31,7 +31,7 @@ export default function CartPage() {
         items: items.map((item: any) => ({
           productId: String(item.productId || item.id).split('-')[0], 
           size: item.size || 'M',
-          toppings: item.toppings ? (Array.isArray(item.toppings) ? item.toppings : [item.toppings]) : [],
+          toppings: item.topping ? item.topping.split(',').map((t: string) => t.trim()).filter(Boolean): [],
           qty: Number(item.qty || 1),
         })),
       };
