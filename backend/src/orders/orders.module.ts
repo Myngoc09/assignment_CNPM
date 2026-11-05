@@ -6,6 +6,7 @@ import { OrdersService } from './orders.service';
 import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Product } from '../products/entities/product.entity';
+import { OrderStateMachineService } from './services/order-state-machine.service';
 
 @Module({
   imports: [
@@ -13,7 +14,7 @@ import { Product } from '../products/entities/product.entity';
     AuthModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService],
-  exports: [OrdersService],
+  providers: [OrdersService, OrderStateMachineService],
+  exports: [OrdersService, OrderStateMachineService],
 })
 export class OrdersModule {}
