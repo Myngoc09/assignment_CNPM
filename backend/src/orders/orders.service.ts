@@ -31,6 +31,7 @@ export class OrdersService {
     if (missing.length) {
       throw new NotFoundException(`Sản phẩm không tồn tại: ${missing.join(', ')}`);
     }
+   
 
     // 3. Kiểm tra tồn kho cơ bản (chống đặt đồng thời làm ở Task 10)
     const qtyByProduct = new Map<string, number>();
@@ -59,9 +60,11 @@ export class OrdersService {
 
       orderItemsData.push({
         productId: item.productId,
+        productName: product.name,
         size: item.size,
         toppings,
         qty: item.qty,
+        unitPrice,
         lineTotal,
       });
     }
@@ -100,5 +103,41 @@ export class OrdersService {
     } finally {
       await queryRunner.release();
     }
+  }
+    // xu ly lich su don hang cua user hien tai
+  async getMyOrders(userId: string) {
+    const orders = await this.orderRepository.find({
+      where: { userId },
+
+      // Lấy danh sách sản phẩm thuộc từng đơn hàng
+      relations: {
+        items: true,
+    },
+      order: {
+      createdAt: 'DESC',
+    },
+      select: {
+        id: true,
+        status: true,
+        total: true,
+        createdAt: true,
+
+        items: {
+          id: true,
+          productId: true,
+          productName: true,
+          size: true,
+          toppings: true,
+          qty: true,
+          unitPrice: true,
+          lineTotal: true,
+    },
+  }
+    });
+
+  return {
+    message: 'Lấy lịch sử đơn hàng thành công',
+    data: orders,
+    };
   }
 }

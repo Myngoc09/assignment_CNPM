@@ -12,12 +12,20 @@ export class OrderItem {
   @Column()
   productId: string;
 
+ 
+
   @Column()
   size: string;
 
   @Column('int')
   qty: number;
 
+  @Column({ type: 'varchar', nullable: true })
+  productName: string | null;
+
+  @Column('float', { nullable: true })
+  unitPrice: number | null;
+  
   @Column('float')
   lineTotal: number;
 
