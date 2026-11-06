@@ -9,6 +9,7 @@ import {
 
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
+import { OrderStateMachineService } from '../orders/services/order-state-machine.service';
 
 import {
   createHmac,
@@ -47,7 +48,7 @@ export class PaymentsService {
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
-
+    private readonly orderStateMachine: OrderStateMachineService,
     private readonly dataSource: DataSource,
 
     private readonly configService: ConfigService,
@@ -100,6 +101,13 @@ export class PaymentsService {
           throw new ConflictException(
             'Đơn hàng không thể thanh toán ở trạng thái hiện tại',
           );
+        }
+        if (order.status === OrderStatus.PAYMENT_FAILED) {
+          order.status = this.orderStateMachine.transition(
+            order.status,
+            OrderStatus.PENDING,
+          );
+          await manager.save(Order, order);
         }
 
         if (
@@ -384,9 +392,15 @@ export class PaymentsService {
         : 'MOCK_FAILURE';
 
       if (isSuccess) {
-        order.status = OrderStatus.PAID;
+        order.status = this.orderStateMachine.transition(
+          order.status,
+          OrderStatus.PAID,
+        );
       } else if (order.status === OrderStatus.PENDING) {
-        order.status = OrderStatus.PAYMENT_FAILED;
+        order.status = this.orderStateMachine.transition(
+          order.status,
+          OrderStatus.PAYMENT_FAILED,
+        );
       }
 
       const savedPayment = await manager.save(
@@ -456,7 +470,10 @@ export class PaymentsService {
       await manager.save(Payment, payment);
 
       if (order && order.status === OrderStatus.PENDING) {
-        order.status = OrderStatus.PAYMENT_FAILED;
+        order.status = this.orderStateMachine.transition(
+          order.status,
+          OrderStatus.PAYMENT_FAILED,
+        );
         await manager.save(Order, order);
       }
     });
