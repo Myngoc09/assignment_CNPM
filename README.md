@@ -1,5 +1,30 @@
 # BrewLite – Project Tasks
 
+## Task 7 – Xác thực người dùng và giỏ hàng theo tài khoản
+
+### Nội dung
+
+- Xác thực trạng thái đăng nhập bằng JWT.
+- Kiểm tra quyền đăng nhập trước khi thêm sản phẩm vào giỏ hàng.
+- Chuyển đến trang đăng nhập nếu người dùng chưa đăng nhập.
+- Tự động thêm sản phẩm vào giỏ hàng sau khi đăng nhập thành công.
+- Lưu sản phẩm đã chọn trước khi đăng nhập.
+- Quản lý giỏ hàng riêng cho từng tài khoản.
+- Lưu giỏ hàng bằng Local Storage.
+- Cập nhật thông tin tài khoản người dùng.
+- Liên kết đơn hàng với tài khoản người dùng thông qua JWT.
+
+### Công nghệ
+
+- Next.js
+- React
+- TypeScript
+- NestJS
+- JWT (JSON Web Token)
+- Zustand
+- Local Storage
+- Tailwind CSS
+
 ## Task 6 – PostgreSQL + TypeORM
 
 ### Nội dung
