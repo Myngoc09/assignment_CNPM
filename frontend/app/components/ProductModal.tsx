@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -42,15 +43,23 @@ export default function ProductModal({
   const [selectedSize, setSelectedSize] = useState('M');
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
 
-  // Đặt lại lựa chọn khi mở một sản phẩm khác
+  const isOneSize = product?.name
+    .toLowerCase()
+    .includes('croissant') ?? false;
+
+  // Dat lai lua chon khi mo mot san pham khac
   useEffect(() => {
     if (product) {
-      setSelectedSize('M');
+      const isCroissant = product.name
+        .toLowerCase()
+        .includes('croissant');
+
+      setSelectedSize(isCroissant ? 'ONE_SIZE' : 'M');
       setSelectedToppings([]);
     }
   }, [product]);
 
-  // Đóng cửa sổ bằng phím Escape
+  // Dong cua so bang phim Escape
   useEffect(() => {
     if (!product) return;
 
@@ -69,8 +78,10 @@ export default function ProductModal({
 
   if (!product) return null;
 
-  const sizeExtra =
-    SIZES.find((size) => size.name === selectedSize)?.extraPrice ?? 0;
+  // Croissant khong co phu phi size
+  const sizeExtra = isOneSize
+    ? 0
+    : SIZES.find((size) => size.name === selectedSize)?.extraPrice ?? 0;
 
   const toppingTotal = TOPPINGS
     .filter((topping) => selectedToppings.includes(topping.name))
@@ -89,10 +100,11 @@ export default function ProductModal({
   const handleAddToCart = () => {
     onAddToCart(
       product,
-      selectedSize,
+      isOneSize ? 'ONE_SIZE' : selectedSize,
       selectedToppings,
       totalPrice,
     );
+
     onClose();
   };
 
@@ -108,7 +120,7 @@ export default function ProductModal({
         className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-3xl bg-[#FDFBF7] p-5 shadow-2xl sm:rounded-3xl"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* Tiêu đề */}
+        {/* Tieu de */}
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-serif font-semibold text-[#1C2A24]">
             Chi tiết sản phẩm
@@ -124,14 +136,14 @@ export default function ProductModal({
           </button>
         </div>
 
-        {/* Ảnh sản phẩm */}
+        {/* Anh san pham */}
         <img
           src={product.imageUrl}
           alt={product.name}
           className="h-48 w-full rounded-2xl bg-gray-100 object-cover"
         />
 
-        {/* Thông tin sản phẩm */}
+        {/* Thong tin san pham */}
         <div className="mt-4">
           <p className="text-xs text-[#B58A59]">{product.category}</p>
 
@@ -144,37 +156,39 @@ export default function ProductModal({
           </p>
         </div>
 
-        {/* Chọn size */}
-        <section className="mt-5">
-          <h4 className="mb-3 font-semibold text-[#1C2A24]">
-            Chọn size
-          </h4>
+        {/* Chi hien thi size voi san pham co nhieu size */}
+        {!isOneSize && (
+          <section className="mt-5">
+            <h4 className="mb-3 font-semibold text-[#1C2A24]">
+              Chọn size
+            </h4>
 
-          <div className="grid grid-cols-3 gap-3">
-            {SIZES.map((size) => (
-              <button
-                key={size.name}
-                type="button"
-                onClick={() => setSelectedSize(size.name)}
-                className={`rounded-xl border p-3 text-sm transition ${
-                  selectedSize === size.name
-                    ? 'border-[#1C2A24] bg-[#1C2A24] text-white'
-                    : 'border-gray-200 bg-white text-gray-700'
-                }`}
-              >
-                <span className="block font-semibold">{size.name}</span>
+            <div className="grid grid-cols-3 gap-3">
+              {SIZES.map((size) => (
+                <button
+                  key={size.name}
+                  type="button"
+                  onClick={() => setSelectedSize(size.name)}
+                  className={`rounded-xl border p-3 text-sm transition ${
+                    selectedSize === size.name
+                      ? 'border-[#1C2A24] bg-[#1C2A24] text-white'
+                      : 'border-gray-200 bg-white text-gray-700'
+                  }`}
+                >
+                  <span className="block font-semibold">{size.name}</span>
 
-                <span className="mt-1 block text-xs">
-                  {size.extraPrice === 0
-                    ? 'Giá gốc'
-                    : `+${size.extraPrice.toLocaleString('vi-VN')}đ`}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+                  <span className="mt-1 block text-xs">
+                    {size.extraPrice === 0
+                      ? 'Giá gốc'
+                      : `+${size.extraPrice.toLocaleString('vi-VN')}đ`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
-        {/* Chọn topping */}
+        {/* Chon topping */}
         <section className="mt-5">
           <h4 className="mb-3 font-semibold text-[#1C2A24]">
             Chọn topping
@@ -207,7 +221,7 @@ export default function ProductModal({
           </div>
         </section>
 
-        {/* Tổng tiền */}
+        {/* Tong tien */}
         <div className="mt-5 flex items-center justify-between border-t border-gray-200 pt-4">
           <span className="font-medium text-gray-600">
             Tổng tiền
@@ -218,7 +232,7 @@ export default function ProductModal({
           </span>
         </div>
 
-        {/* Nút thêm vào giỏ */}
+        {/* Nut them vao gio */}
         <button
           type="button"
           onClick={handleAddToCart}

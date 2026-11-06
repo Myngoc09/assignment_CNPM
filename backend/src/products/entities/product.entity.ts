@@ -1,9 +1,12 @@
-import { Entity, PrimaryColumn, Column } from 'typeorm';
+import { Entity, PrimaryColumn, Column, VersionColumn } from 'typeorm';
 
 @Entity('products')
 export class Product {
   @PrimaryColumn({ type: 'varchar' })
   id: string;
+
+  @VersionColumn()
+  version: number;
 
   @Column()
   name: string;

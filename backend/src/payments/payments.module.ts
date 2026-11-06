@@ -9,12 +9,14 @@ import { Payment } from './entities/payment.entity';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { OrdersModule } from '../orders/orders.module';
+import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Payment, Order]),
     OrdersModule,
     AuthModule,
+    InventoryModule,
   ],
   controllers: [PaymentsController],
   providers: [PaymentsService],

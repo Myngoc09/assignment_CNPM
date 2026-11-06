@@ -10,7 +10,7 @@ import {
   Min,
 } from 'class-validator';
 
-export const SIZES = ['S', 'M', 'L'] as const;
+export const SIZES = ['S', 'M', 'L', 'ONE_SIZE'] as const;
 export type SizeType = (typeof SIZES)[number];
 
 export const TOPPINGS = [
@@ -27,7 +27,9 @@ export class CreateOrderItemDto {
   @IsString({ message: 'productId phải là chuỗi' })
   productId: string;
 
-  @IsIn(SIZES, { message: 'size phải là S, M hoặc L' })
+  @IsIn(SIZES, {
+    message: 'size phải là S, M, L hoặc ONE_SIZE',
+  })
   size: SizeType;
 
   @IsOptional()

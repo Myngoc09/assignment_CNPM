@@ -10,6 +10,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OrderStateMachineService } from '../orders/services/order-state-machine.service';
+import { IngredientInventoryService } from '../inventory/ingredient-inventory.service';
+import { OrderItem } from '../orders/entities/order-item.entity';
 
 import {
   createHmac,
@@ -50,6 +52,7 @@ export class PaymentsService {
     private readonly paymentRepository: Repository<Payment>,
     private readonly orderStateMachine: OrderStateMachineService,
     private readonly dataSource: DataSource,
+    private readonly ingredientInventoryService: IngredientInventoryService,
 
     private readonly configService: ConfigService,
   ) {}
@@ -103,10 +106,25 @@ export class PaymentsService {
           );
         }
         if (order.status === OrderStatus.PAYMENT_FAILED) {
+          // Lay cac san pham trong don hang
+          const orderItems = await manager.find(OrderItem, {
+            where: {
+              orderId: order.id,
+            },
+          });
+
+          // Giu nguyen lieu lai truoc khi thanh toan lai
+          await this.ingredientInventoryService.reserveIngredients(
+            manager,
+            order.id,
+            orderItems,
+          );
+
           order.status = this.orderStateMachine.transition(
             order.status,
             OrderStatus.PENDING,
           );
+
           await manager.save(Order, order);
         }
 
@@ -392,15 +410,29 @@ export class PaymentsService {
         : 'MOCK_FAILURE';
 
       if (isSuccess) {
+        // Thanh toan thanh cong: tru nguyen lieu kho thuc te
+        await this.ingredientInventoryService.consumeIngredients(
+          manager,
+          order.id,
+        );
+
         order.status = this.orderStateMachine.transition(
           order.status,
           OrderStatus.PAID,
         );
-      } else if (order.status === OrderStatus.PENDING) {
-        order.status = this.orderStateMachine.transition(
-          order.status,
-          OrderStatus.PAYMENT_FAILED,
+      } else {
+        // Thanh toan that bai: giai phong nguyen lieu da giu
+        await this.ingredientInventoryService.releaseIngredients(
+          manager,
+          order.id,
         );
+
+        if (order.status === OrderStatus.PENDING) {
+          order.status = this.orderStateMachine.transition(
+            order.status,
+            OrderStatus.PAYMENT_FAILED,
+          );
+        }
       }
 
       const savedPayment = await manager.save(
@@ -466,6 +498,14 @@ export class PaymentsService {
 
       payment.status = PaymentStatus.PAYMENT_FAILED;
       payment.responseCode = 'MOCK_BANK_ERROR';
+
+      // Giai phong nguyen lieu khi giao dich gap loi
+      if (order) {
+        await this.ingredientInventoryService.releaseIngredients(
+          manager,
+          order.id,
+        );
+      }
 
       await manager.save(Payment, payment);
 
