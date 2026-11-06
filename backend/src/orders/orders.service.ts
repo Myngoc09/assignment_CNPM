@@ -22,7 +22,7 @@ export class OrdersService {
   async createOrder(dto: CreateOrderDto, userId: string) {
     // 1. Lấy danh sách productId (loại trùng)
     const productIds = [...new Set(dto.items.map((i) => i.productId))];
-
+    
     // 2. Tra giá từ DB, không tin giá client gửi
     const products = await this.productRepository.findBy({ id: In(productIds) });
     const productMap = new Map(products.map((p) => [p.id, p]));
