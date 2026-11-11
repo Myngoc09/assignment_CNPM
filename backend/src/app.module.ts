@@ -79,7 +79,7 @@ import { PaymentsModule } from './payments/payments.module';
         type: 'postgres' as const,
         url: configService.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: false,
       }),
     }),
 

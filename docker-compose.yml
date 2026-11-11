@@ -1,7 +1,7 @@
 services:
   # ---------- 1. CƠ SỞ DỮ LIỆU ----------
   postgres:
-    image: postgres:16
+    image: postgres:18
     container_name: brewlite-postgres
     restart: unless-stopped
     environment:
@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres18_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U brewlite -d brewlite"]
       interval: 5s
@@ -51,6 +51,6 @@ services:
       - backend
 
 volumes:
-  postgres_data:
+  postgres18_data:
 
  
