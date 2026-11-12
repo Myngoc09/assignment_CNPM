@@ -46,6 +46,12 @@ export class Order {
   promoCode: string | null;
 
   @Column({ type: 'integer', default: 0 })
+  pointsRedeemed: number;
+
+  @Column({ type: 'integer', default: 0 })
+  pointsDiscountAmount: number;
+
+  @Column({ type: 'integer', default: 0 })
   rewardPointsEarned: number;
 
   @Column({ type: 'timestamptz', nullable: true })

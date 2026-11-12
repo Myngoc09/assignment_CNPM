@@ -9,6 +9,7 @@ import { TOPPING_PRICE } from './dto/create-order-item.dto';
 import { PromoCode } from '../promotions/entities/promo-code.entity';
 import { PromotionsService } from '../promotions/promotions.service';
 import { OrderStateMachineService } from './services/order-state-machine.service';
+import { User } from '../users/entities/user.entity';
 
 const SIZE_EXTRA: Record<string, number> = { S: 0, M: 5000, L: 10000 };
 
@@ -27,6 +28,9 @@ export class OrdersService {
     for (const item of dto.items) qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) ?? 0) + item.qty);
 
     return this.dataSource.transaction(async (manager) => {
+      const user = await manager.findOne(User, { where: { id: userId }, lock: { mode: 'pessimistic_write' } });
+      if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+
       const productIds = [...qtyByProduct.keys()].sort();
       const products = await manager.find(Product, { where: { id: In(productIds) }, order: { id: 'ASC' } });
       const productMap = new Map(products.map((product) => [product.id, product]));
@@ -68,14 +72,39 @@ export class OrdersService {
         promo.usedCount += 1;
         await manager.save(PromoCode, promo);
       }
-      const total = subtotal - discountAmount;
-      if (!Number.isSafeInteger(total) || total <= 0) throw new BadRequestException('Tổng tiền đơn hàng không hợp lệ');
+      const afterPromo = subtotal - discountAmount;
+      if (!Number.isSafeInteger(afterPromo) || afterPromo <= 0) throw new BadRequestException('Tổng tiền đơn hàng không hợp lệ');
 
-      const order = manager.create(Order, { userId, status: OrderStatus.PENDING, subtotal, discountAmount, promoCode, total, rewardPointsEarned: 0, loyaltyAwardedAt: null });
+      // Reserve points logically across unpaid orders. The balance itself is only
+      // debited after payment succeeds; pending/failed orders count as reservations.
+      const reservedRow = await manager.createQueryBuilder(Order, 'reserved')
+        .select('COALESCE(SUM(reserved.pointsRedeemed), 0)', 'points')
+        .where('reserved.userId = :userId', { userId })
+        .andWhere('reserved.status IN (:...statuses)', { statuses: [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED] })
+        .getRawOne<{ points: string }>();
+      const reservedPoints = Number(reservedRow?.points ?? 0);
+      const availablePoints = Math.max(0, (user.loyaltyPoints ?? 0) - reservedPoints);
+      const requestedPoints = dto.pointsToRedeem ?? 0;
+      if (!Number.isSafeInteger(requestedPoints) || requestedPoints < 0) throw new BadRequestException('Số điểm sử dụng không hợp lệ');
+      if (requestedPoints > availablePoints) throw new ConflictException(`Bạn chỉ còn ${availablePoints.toLocaleString('vi-VN')} điểm khả dụng`);
+      // 1 point = 1 VND. Keep at least 1 VND payable because Mock Bank
+      // only processes positive payment amounts.
+      const pointsRedeemed = Math.min(requestedPoints, Math.max(0, afterPromo - 1));
+      const pointsDiscountAmount = pointsRedeemed;
+      const total = afterPromo - pointsDiscountAmount;
+
+      const order = manager.create(Order, {
+        userId, status: OrderStatus.PENDING, subtotal, discountAmount, promoCode, total,
+        pointsRedeemed, pointsDiscountAmount, rewardPointsEarned: 0, loyaltyAwardedAt: null,
+      });
       const savedOrder = await manager.save(Order, order);
       const items = itemRows.map((row) => manager.create(OrderItem, { ...row, orderId: savedOrder.id }));
       await manager.save(OrderItem, items);
-      return { message: 'Tạo đơn hàng thành công', orderId: savedOrder.id, status: savedOrder.status, subtotal, promoCode, discountAmount, total, createdAt: savedOrder.createdAt, items };
+      return {
+        message: 'Tạo đơn hàng thành công', orderId: savedOrder.id, status: savedOrder.status,
+        subtotal, promoCode, discountAmount, pointsRedeemed, pointsDiscountAmount,
+        availablePoints, total, createdAt: savedOrder.createdAt, items,
+      };
     });
   }
 
@@ -106,7 +135,7 @@ export class OrdersService {
   async getMyOrders(userId: string) {
     const orders = await this.orderRepository.find({
       where: { userId }, relations: { items: true }, order: { createdAt: 'DESC' },
-      select: { id: true, status: true, total: true, subtotal: true, discountAmount: true, promoCode: true, rewardPointsEarned: true, createdAt: true,
+      select: { id: true, status: true, total: true, subtotal: true, discountAmount: true, promoCode: true, pointsRedeemed: true, pointsDiscountAmount: true, rewardPointsEarned: true, loyaltyAwardedAt: true, createdAt: true,
         items: { id: true, productId: true, productName: true, size: true, toppings: true, qty: true, unitPrice: true, lineTotal: true } },
     });
     return { message: 'Lấy lịch sử đơn hàng thành công', data: orders };

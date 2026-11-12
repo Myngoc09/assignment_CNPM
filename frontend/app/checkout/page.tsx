@@ -12,7 +12,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string>('');
-  const [orderSummary, setOrderSummary] = useState<{ subtotal?: number; discountAmount?: number; total?: number; promoCode?: string | null } | null>(null);
+  const [orderSummary, setOrderSummary] = useState<{ subtotal?: number; discountAmount?: number; total?: number; promoCode?: string | null; pointsRedeemed?: number; pointsDiscountAmount?: number } | null>(null);
   const [rewardPoints, setRewardPoints] = useState(0);
   const [paymentSuccess, setPaymentSuccess] = useState<{
     orderId: string;
@@ -135,6 +135,7 @@ export default function CheckoutPage() {
           <div className="mt-3 space-y-1 text-sm">
             <div className="flex justify-between"><span>Tạm tính:</span><span>{Number(orderSummary.subtotal).toLocaleString('vi-VN')} đ</span></div>
             {Number(orderSummary.discountAmount || 0) > 0 && <div className="flex justify-between text-green-700"><span>Khuyến mãi ({orderSummary.promoCode}):</span><span>-{Number(orderSummary.discountAmount).toLocaleString('vi-VN')} đ</span></div>}
+            {Number(orderSummary.pointsDiscountAmount || 0) > 0 && <div className="flex justify-between text-green-700"><span>Điểm đã sử dụng ({Number(orderSummary.pointsRedeemed || 0).toLocaleString('vi-VN')} điểm):</span><span>-{Number(orderSummary.pointsDiscountAmount).toLocaleString('vi-VN')} đ</span></div>}
           </div>
         )}
         <div className="flex justify-between font-bold text-lg mt-4 pt-2 border-t">

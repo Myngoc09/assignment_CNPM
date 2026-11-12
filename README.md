@@ -338,3 +338,70 @@ Content-Type: application/json
 
 { "orderId": "<uuid>", "method": "WALLET", "provider": "MOCK" }
 ```
+
+## Task 10-2: Idempotent payment, promotions and loyalty points
+
+- Mock Bank payment requests use `Idempotency-Key`; a repeated key with the same payload replays the original result, while a different payload is rejected.
+- Promo-code discount and loyalty-point discount are stored as order snapshots for order history.
+- Loyalty conversion: **1 point = 1 VND**. Points used by unpaid orders are reserved when checking available balance, but the customer's point balance is debited only after payment succeeds.
+- Successful payment earns `floor(actual_paid_amount * 5%)` points. The actual paid amount is the order total after promo and point discounts.
+- Failed payment does not debit or award points. Replayed successful payment does not process loyalty transactions a second time.
+- API: `GET /loyalty/me`, `GET /loyalty/me/transactions`; create an order with optional `pointsToRedeem` and `promoCode`.
+
+
+
+## TASK 10 - THANH TOAN, KHUYEN MAI VA DIEM THUONG
+
+### 1. Thanh toán Idempotent
+- Tích hợp thanh toán thông qua BrewLite Mock Bank.
+- Sử dụng `Idempotency-Key` để định danh yêu cầu thanh toán.
+- Ngăn chặn thanh toán trùng lặp khi gửi lại cùng yêu cầu với cùng khóa.
+- Từ chối yêu cầu nếu cùng khóa nhưng nội dung khác.
+- Lưu thông tin và kết quả thanh toán.
+
+### 2. Khuyến mãi
+- Lấy danh sách mã khuyến mãi đang hoạt động.
+- Kiểm tra điều kiện áp dụng mã khuyến mãi.
+- Hỗ trợ giảm giá theo phần trăm và giới hạn số tiền giảm tối đa.
+- Lưu mã khuyến mãi và số tiền giảm vào đơn hàng.
+
+Mã khuyến mãi mẫu:
+- Mã: `BREWLITE10`
+- Giảm giá: 10%.
+- Đơn hàng tối thiểu: 30.000 VND.
+- Giảm tối đa: 20.000 VND.
+
+### 3. Tích lũy và sử dụng điểm thưởng
+- Hiển thị số dư điểm thưởng.
+- Quy đổi 1 điểm = 1 VND.
+- Cho phép sử dụng điểm để giảm giá đơn hàng.
+- Không cho phép sử dụng vượt quá số điểm hiện có.
+- Chỉ trừ điểm sau khi thanh toán thành công.
+- Cộng điểm thưởng bằng 5% số tiền thực tế khách đã thanh toán.
+- Lưu lịch sử cộng và trừ điểm.
+- Ngăn chặn cộng/trừ điểm nhiều lần khi thanh toán được gửi lại.
+
+### 4. Giao diện
+- Giỏ hàng/checkout: hiển thị điểm khả dụng, điểm sử dụng, tiền giảm và tổng tiền.
+- Hồ sơ: hiển thị số dư và lịch sử điểm.
+- Lịch sử đơn hàng: hiển thị mã khuyến mãi, số tiền giảm, điểm đã sử dụng và điểm được cộng.
+
+### 5. API liên quan
+
+| Method | Endpoint | Chức năng |
+|---|---|---|
+| GET | `/promotions` | Danh sách khuyến mãi |
+| POST | `/promotions/validate` | Kiểm tra mã khuyến mãi |
+| POST | `/orders` | Tạo đơn hàng |
+| GET | `/orders/me` | Lịch sử đơn hàng |
+| POST | `/payments` | Thanh toán |
+| GET | `/payments/:id` | Tra cứu thanh toán |
+| GET | `/loyalty/me` | Số dư điểm |
+| GET | `/loyalty/me/transactions` | Lịch sử điểm |
+
+### 6. Công nghệ
+- Backend: NestJS, TypeScript, TypeORM.
+- Database: PostgreSQL.
+- Frontend: Next.js.
+- Thanh toán mô phỏng: BrewLite Mock Bank.
+- Docker Compose.

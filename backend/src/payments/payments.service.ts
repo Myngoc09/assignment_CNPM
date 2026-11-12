@@ -81,7 +81,7 @@ export class PaymentsService {
 
   private async paymentResult(payment: Payment, replay: boolean) {
     const order = await this.dataSource.getRepository(Order).findOne({ where: { id: payment.orderId } });
-    return { message: payment.status === PaymentStatus.PAID ? 'Thanh toán đã thành công trước đó' : payment.status === PaymentStatus.PAYMENT_FAILED ? 'Giao dịch trước đó đã thất bại; hãy tạo yêu cầu mới với Idempotency-Key mới' : 'Yêu cầu thanh toán đang được xử lý', paymentId: payment.id, orderId: payment.orderId, amount: payment.amount, method: payment.method, status: payment.status, orderStatus: payment.status === PaymentStatus.PAID ? OrderStatus.PAID : undefined, mockTransactionId: payment.mockTransactionId, rewardPointsEarned: order?.rewardPointsEarned ?? 0, idempotentReplay: replay, simulated: true };
+    return { message: payment.status === PaymentStatus.PAID ? 'Thanh toán đã thành công trước đó' : payment.status === PaymentStatus.PAYMENT_FAILED ? 'Giao dịch trước đó đã thất bại; hãy tạo yêu cầu mới với Idempotency-Key mới' : 'Yêu cầu thanh toán đang được xử lý', paymentId: payment.id, orderId: payment.orderId, amount: payment.amount, method: payment.method, status: payment.status, orderStatus: payment.status === PaymentStatus.PAID ? OrderStatus.PAID : undefined, mockTransactionId: payment.mockTransactionId, rewardPointsEarned: order?.rewardPointsEarned ?? 0, pointsRedeemed: order?.pointsRedeemed ?? 0, pointsDiscountAmount: order?.pointsDiscountAmount ?? 0, idempotentReplay: replay, simulated: true };
   }
 
   private async callMockBank(orderId: string, amount: number, idempotencyKey: string): Promise<MockBankResponse> {
@@ -124,13 +124,30 @@ export class PaymentsService {
         order.status = this.orderStateMachine.transition(order.status, OrderStatus.PAID);
         const user = order.userId ? await manager.findOne(User, { where: { id: order.userId }, lock: { mode: 'pessimistic_write' } }) : null;
         if (user && !order.loyaltyAwardedAt) {
-          const points = Math.floor(payment.amount / 10000);
-          if (points > 0) {
-            user.loyaltyPoints = (user.loyaltyPoints ?? 0) + points;
-            await manager.save(User, user);
-            await manager.save(LoyaltyTransaction, manager.create(LoyaltyTransaction, { userId: user.id, orderId: order.id, points, type: LoyaltyTransactionType.EARN, description: `Tích điểm từ đơn hàng ${order.id}` }));
+          const pointsToSpend = order.pointsRedeemed ?? 0;
+          if ((user.loyaltyPoints ?? 0) < pointsToSpend) {
+            throw new ConflictException('Số dư điểm thưởng không đủ để hoàn tất đơn hàng này');
           }
-          order.rewardPointsEarned = points;
+          if (pointsToSpend > 0) {
+            user.loyaltyPoints = (user.loyaltyPoints ?? 0) - pointsToSpend;
+            await manager.save(LoyaltyTransaction, manager.create(LoyaltyTransaction, {
+              userId: user.id, orderId: order.id, points: pointsToSpend,
+              type: LoyaltyTransactionType.REDEEM,
+              description: `Sử dụng điểm cho đơn hàng ${order.id}`,
+            }));
+          }
+          // Award 5% of the actual amount charged after promo and point discounts.
+          const earnedPoints = Math.floor(payment.amount * 0.05);
+          if (earnedPoints > 0) {
+            user.loyaltyPoints = (user.loyaltyPoints ?? 0) + earnedPoints;
+            await manager.save(LoyaltyTransaction, manager.create(LoyaltyTransaction, {
+              userId: user.id, orderId: order.id, points: earnedPoints,
+              type: LoyaltyTransactionType.EARN,
+              description: `Tích 5% điểm từ số tiền thanh toán đơn hàng ${order.id}`,
+            }));
+          }
+          await manager.save(User, user);
+          order.rewardPointsEarned = earnedPoints;
           order.loyaltyAwardedAt = new Date();
         }
       } else if (order.status === OrderStatus.PENDING) {
@@ -138,7 +155,7 @@ export class PaymentsService {
       }
       await manager.save(Payment, payment);
       await manager.save(Order, order);
-      return { message: success ? 'Thanh toán Mock Bank thành công' : 'Thanh toán Mock Bank thất bại', paymentId: payment.id, orderId: order.id, amount: payment.amount, method: payment.method, provider: payment.provider, status: payment.status, orderStatus: order.status, transactionRef: payment.txnRef, mockTransactionId: payment.mockTransactionId, responseCode: payment.responseCode, rewardPointsEarned: order.rewardPointsEarned, simulated: true };
+      return { message: success ? 'Thanh toán Mock Bank thành công' : 'Thanh toán Mock Bank thất bại', paymentId: payment.id, orderId: order.id, amount: payment.amount, method: payment.method, provider: payment.provider, status: payment.status, orderStatus: order.status, transactionRef: payment.txnRef, mockTransactionId: payment.mockTransactionId, responseCode: payment.responseCode, rewardPointsEarned: order.rewardPointsEarned, pointsRedeemed: order.pointsRedeemed, pointsDiscountAmount: order.pointsDiscountAmount, simulated: true };
     });
   }
 

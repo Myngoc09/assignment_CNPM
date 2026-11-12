@@ -8,10 +8,11 @@ import {
 
 export enum LoyaltyTransactionType {
   EARN = 'EARN',
+  REDEEM = 'REDEEM',
 }
 
 @Entity('loyalty_transactions')
-@Index(['orderId'], { unique: true })
+@Index(['orderId', 'type'], { unique: true })
 export class LoyaltyTransaction {
   @PrimaryGeneratedColumn('uuid')
   id: string;

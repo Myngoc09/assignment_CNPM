@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/useCartStore';
 import Link from 'next/link';
@@ -9,6 +9,24 @@ export default function CartPage() {
   const { items, updateQty, removeFromCart, getTotalPrice, clearCart } = useCartStore();
   const [loading, setLoading] = useState(false);
   const [promoCode, setPromoCode] = useState('');
+  const [pointsBalance, setPointsBalance] = useState(0);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [pointsLoading, setPointsLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) { setPointsLoading(false); return; }
+    fetch('http://localhost:3001/loyalty/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Không tải được điểm thưởng');
+        return response.json();
+      })
+      .then((data) => setPointsBalance(Number(data.availablePoints ?? data.points ?? 0)))
+      .catch(() => setPointsBalance(0))
+      .finally(() => setPointsLoading(false));
+  }, []);
 
   // [Chức năng mới] Gọi API POST /orders trước khi sang trang /checkout
   const handleProceedToCheckout = async () => {
@@ -30,6 +48,7 @@ export default function CartPage() {
       // 1. Map dữ liệu chuẩn hóa, tách lấy ID gốc ("1", "2", "3", "4") để khớp DB PostgreSQL
       const orderPayload = {
         promoCode: promoCode.trim() || undefined,
+        pointsToRedeem: Number(pointsToRedeem) || 0,
         items: items.map((item: any) => ({
           productId: String(item.productId || item.id).split('-')[0], 
           size: item.size || 'M',
@@ -67,7 +86,7 @@ export default function CartPage() {
       }
 
       localStorage.setItem('current_order_id', newOrderId);
-      localStorage.setItem('current_order_summary', JSON.stringify({ subtotal: data.subtotal, discountAmount: data.discountAmount, total: data.total, promoCode: data.promoCode }));
+      localStorage.setItem('current_order_summary', JSON.stringify({ subtotal: data.subtotal, discountAmount: data.discountAmount, total: data.total, promoCode: data.promoCode, pointsRedeemed: data.pointsRedeemed, pointsDiscountAmount: data.pointsDiscountAmount, availablePoints: data.availablePoints }));
       router.push('/checkout');
 
     } catch (err: any) {
@@ -77,6 +96,9 @@ export default function CartPage() {
       setLoading(false);
     }
   };
+
+  const pointsDiscountPreview = Math.min(pointsToRedeem, Math.max(0, getTotalPrice() - 1));
+  const estimatedTotal = Math.max(1, getTotalPrice() - pointsDiscountPreview);
 
   if (items.length === 0) {
     return (
@@ -159,11 +181,43 @@ export default function CartPage() {
         <p className="text-xs text-gray-500 mt-1">Mã demo BREWLITE10 giảm 10% cho đơn từ 30.000đ (tối đa 20.000đ).</p>
       </div>
 
-      <div className="mt-6 border-t pt-4 flex justify-between items-center">
-        <span className="text-lg font-semibold text-gray-700">Tổng cộng:</span>
-        <span className="text-2xl font-bold text-amber-600">
-          {getTotalPrice().toLocaleString('vi-VN')}₫
-        </span>
+      <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div className="flex justify-between gap-3">
+          <label htmlFor="pointsToRedeem" className="font-semibold text-gray-800">Dùng điểm thưởng</label>
+          <span className="text-sm font-semibold text-amber-800">
+            {pointsLoading ? 'Đang tải...' : `${pointsBalance.toLocaleString('vi-VN')} điểm`}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-gray-600">1 điểm = 1₫ giảm giá. Điểm chỉ bị trừ sau khi thanh toán thành công.</p>
+        <input
+          id="pointsToRedeem"
+          type="number"
+          min="0"
+          max={pointsBalance}
+          step="1"
+          value={pointsToRedeem}
+          onChange={(event) => setPointsToRedeem(Math.max(0, Math.min(pointsBalance, Math.floor(Number(event.target.value) || 0))))}
+          disabled={pointsLoading || pointsBalance === 0}
+          className="mt-3 w-full rounded-lg border bg-white px-3 py-2 text-gray-800"
+          placeholder="Nhập số điểm muốn sử dụng"
+        />
+        <p className="mt-2 text-sm text-green-700">Giảm dự kiến: {(Math.min(pointsToRedeem, Math.max(0, getTotalPrice() - 1))).toLocaleString('vi-VN')}₫</p>
+      </div>
+
+      <div className="mt-6 border-t pt-4 space-y-2">
+        <div className="flex justify-between items-center text-gray-600">
+          <span>Tạm tính:</span><span>{getTotalPrice().toLocaleString('vi-VN')}₫</span>
+        </div>
+        {pointsDiscountPreview > 0 && (
+          <div className="flex justify-between items-center text-green-700">
+            <span>Giảm từ điểm thưởng:</span><span>-{pointsDiscountPreview.toLocaleString('vi-VN')}₫</span>
+          </div>
+        )}
+        <div className="flex justify-between items-center">
+          <span className="text-lg font-semibold text-gray-700">Tổng tạm tính:</span>
+          <span className="text-2xl font-bold text-amber-600">{estimatedTotal.toLocaleString('vi-VN')}₫</span>
+        </div>
+        <p className="text-xs text-gray-500">Mã khuyến mãi (nếu có) sẽ được máy chủ tính chính xác khi tạo đơn.</p>
       </div>
 
       <div className="mt-8 flex gap-4">
