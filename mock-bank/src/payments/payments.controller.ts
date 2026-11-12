@@ -31,6 +31,7 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   charge(
     @Headers('x-api-key') apiKey: string,
+    @Headers('idempotency-key') idempotencyKey: string,
     @Body()
     body: {
       orderId: string;
@@ -40,11 +41,6 @@ export class PaymentsController {
   ) {
     const expectedApiKey = process.env.MOCK_BANK_API_KEY;
 
-console.log('========== MOCK BANK AUTH ==========');
-console.log('API Key received:', apiKey ? 'CÓ' : 'KHÔNG');
-console.log('Expected API Key configured:', expectedApiKey ? 'CÓ' : 'KHÔNG');
-console.log('API Key matches:', apiKey === expectedApiKey);
-console.log('====================================');
     if (!expectedApiKey || apiKey !== expectedApiKey) {
       throw new UnauthorizedException('Invalid API Key');
     }
@@ -76,6 +72,7 @@ console.log('====================================');
     return this.paymentsService.processPayment(
       body.orderId,
       body.amount,
+      idempotencyKey,
       body.simulateResult,
     );
   }

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { OrderStatus } from '../enums/order-status.enum';
+import { OrderStatus } from '../entities/order.entity';
 
 @Injectable()
 export class OrderStateMachineService {

@@ -7,10 +7,13 @@ import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Product } from '../products/entities/product.entity';
 import { OrderStateMachineService } from './services/order-state-machine.service';
+import { PromoCode } from '../promotions/entities/promo-code.entity';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, Product]),
+    TypeOrmModule.forFeature([Order, OrderItem, Product, PromoCode]),
+    PromotionsModule,
     AuthModule,
   ],
   controllers: [OrdersController],

@@ -293,14 +293,48 @@ Trong Thunder Client, Postman hoặc công cụ HTTP tương đương:
 
 ## 4. Thử thanh toán thành công
 
-Gọi `POST http://localhost:3001/payments`, dùng cùng JWT Bearer token:
+Gọi `POST http://localhost:3001/payments`, dùng cùng JWT Bearer token và header `Idempotency-Key` duy nhất cho lần thanh toán:
+
+```http
+Authorization: Bearer <JWT>
+Idempotency-Key: checkout-demo-0001
+Content-Type: application/json
+```
 
 ```json
 {
   "orderId": "ID_DON_HANG",
-  "method": "CARD/WALLET",
+  "method": "WALLET",
   "provider": "MOCK"
 }
 ```
 
-Thay `ID_DON_HANG` bằng `orderId` thật. Sau đó gọi `GET http://localhost:3001/orders/me` với token để xem trạng thái. Khi Mock Bank trả thành công, trạng thái dự kiến là `PENDING -> PAID`.
+`method` nhận `WALLET` hoặc `CARD`. Thay `ID_DON_HANG` bằng `orderId` thật. Gửi lại đúng payload với đúng `Idempotency-Key` sẽ nhận lại giao dịch cũ; dùng cùng key cho payload khác sẽ bị từ chối HTTP 409. Sau đó gọi `GET http://localhost:3001/orders/me` với token để xem trạng thái.
+
+
+## Task 10 – nghiệp vụ backend
+
+Các endpoint bổ sung:
+
+- `GET /promotions` – danh sách mã đang hoạt động.
+- `POST /promotions/validate` – kiểm tra mã với `code` và `subtotal`.
+- `GET /loyalty/me` – số dư điểm; `GET /loyalty/me/transactions` – lịch sử tích điểm.
+
+
+- `POST /orders` nhận `promoCode` tùy chọn, kiểm tra mã giảm giá và trừ tồn kho trong transaction. Mỗi sản phẩm có `version`; câu lệnh cập nhật chỉ thành công khi version và tồn kho vẫn đúng (optimistic locking).
+- `POST /payments` yêu cầu header `Idempotency-Key` (8–128 ký tự). Gửi lại cùng key và cùng payload sẽ dùng lại giao dịch đã tạo; dùng lại key cho payload khác trả HTTP 409.
+- Mock Bank nhận cùng `Idempotency-Key` và phát lại cùng kết quả giao dịch khi request được gửi lại. Bộ nhớ idempotency của Mock Bank là in-memory, sẽ mất khi khởi động lại service; backend vẫn lưu key và payment trong PostgreSQL.
+- Khi thanh toán thành công, order chuyển `PAID` và cộng `floor(amount / 10000)` điểm một lần; lịch sử tại `GET /loyalty/me/transactions`, số dư tại `GET /loyalty/me`.
+- Mã khuyến mãi demo được tạo khi backend khởi động: `BREWLITE10` (giảm 10%, đơn tối thiểu 30.000đ, giảm tối đa 20.000đ).
+- Đây là thanh toán mô phỏng. Mock Bank không chuyển tiền thật vào tài khoản ngân hàng. Muốn nhận tiền thật cần tích hợp cổng thanh toán/ngân hàng được cấp phép và cấu hình merchant credentials/webhook riêng.
+
+### Gọi API thanh toán
+
+```http
+POST /payments
+Authorization: Bearer <JWT>
+Idempotency-Key: checkout-<unique-uuid>
+Content-Type: application/json
+
+{ "orderId": "<uuid>", "method": "WALLET", "provider": "MOCK" }
+```

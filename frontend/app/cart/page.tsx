@@ -8,6 +8,7 @@ export default function CartPage() {
   const router = useRouter();
   const { items, updateQty, removeFromCart, getTotalPrice, clearCart } = useCartStore();
   const [loading, setLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
 
   // [Chức năng mới] Gọi API POST /orders trước khi sang trang /checkout
   const handleProceedToCheckout = async () => {
@@ -28,6 +29,7 @@ export default function CartPage() {
 
       // 1. Map dữ liệu chuẩn hóa, tách lấy ID gốc ("1", "2", "3", "4") để khớp DB PostgreSQL
       const orderPayload = {
+        promoCode: promoCode.trim() || undefined,
         items: items.map((item: any) => ({
           productId: String(item.productId || item.id).split('-')[0], 
           size: item.size || 'M',
@@ -65,6 +67,7 @@ export default function CartPage() {
       }
 
       localStorage.setItem('current_order_id', newOrderId);
+      localStorage.setItem('current_order_summary', JSON.stringify({ subtotal: data.subtotal, discountAmount: data.discountAmount, total: data.total, promoCode: data.promoCode }));
       router.push('/checkout');
 
     } catch (err: any) {
@@ -148,6 +151,12 @@ export default function CartPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="mt-6 border-t pt-4">
+        <label htmlFor="promoCode" className="block text-sm font-semibold text-gray-700 mb-2">Mã khuyến mãi (không bắt buộc)</label>
+        <input id="promoCode" value={promoCode} onChange={(event) => setPromoCode(event.target.value.toUpperCase())} placeholder="Ví dụ: BREWLITE10" maxLength={40} className="w-full border rounded-lg px-3 py-2 text-gray-800" />
+        <p className="text-xs text-gray-500 mt-1">Mã demo BREWLITE10 giảm 10% cho đơn từ 30.000đ (tối đa 20.000đ).</p>
       </div>
 
       <div className="mt-6 border-t pt-4 flex justify-between items-center">

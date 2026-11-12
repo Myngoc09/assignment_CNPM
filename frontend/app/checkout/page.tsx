@@ -12,6 +12,8 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentOrderId, setCurrentOrderId] = useState<string>('');
+  const [orderSummary, setOrderSummary] = useState<{ subtotal?: number; discountAmount?: number; total?: number; promoCode?: string | null } | null>(null);
+  const [rewardPoints, setRewardPoints] = useState(0);
   const [paymentSuccess, setPaymentSuccess] = useState<{
     orderId: string;
     status: string;
@@ -21,6 +23,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const orderId = localStorage.getItem('current_order_id') || '';
     setCurrentOrderId(orderId);
+    try { setOrderSummary(JSON.parse(localStorage.getItem('current_order_summary') || 'null')); } catch { setOrderSummary(null); }
   }, []);
 
   // Tính tổng tiền đơn hàng
@@ -39,6 +42,12 @@ export default function CheckoutPage() {
         throw new Error('Không tìm thấy đơn hàng. Vui lòng quay lại giỏ hàng.');
       }
 
+      let idempotencyKey = localStorage.getItem(`payment_idempotency_${orderId}`);
+      if (!idempotencyKey) {
+        idempotencyKey = `checkout-${crypto.randomUUID()}`;
+        localStorage.setItem(`payment_idempotency_${orderId}`, idempotencyKey);
+      }
+
       const paymentRes = await axios.post(
         `${API_URL}/payments`,
         {
@@ -46,16 +55,23 @@ export default function CheckoutPage() {
           method: paymentMethod,
           provider: 'MOCK',
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': idempotencyKey } }
       );
 
       const { data } = paymentRes;
 
       if (data.status === 'PAID') {
         setPaymentSuccess({ orderId: data.orderId, status: data.status });
+        setRewardPoints(Number(data.rewardPointsEarned || 0));
         localStorage.removeItem('current_order_id');
+        localStorage.removeItem('current_order_summary');
+        localStorage.removeItem(`payment_idempotency_${orderId}`);
         clearCart();
       } else {
+        if (data.status === 'PAYMENT_FAILED') {
+          // Mỗi lần thử thanh toán thất bại là một giao dịch mới, dùng key mới.
+          localStorage.removeItem(`payment_idempotency_${orderId}`);
+        }
         setErrorMessage(data.message || 'Thanh toán thất bại, vui lòng thử lại.');
       }
     } catch (error: any) {
@@ -73,6 +89,7 @@ export default function CheckoutPage() {
       <div className="max-w-md mx-auto mt-10 p-6 bg-green-50 border border-green-200 rounded-lg text-center">
         <h2 className="text-2xl font-bold text-green-700 mb-2">Thanh toán thành công!</h2>
         <p className="text-gray-700 mb-1">Mã đơn hàng: <strong>{paymentSuccess.orderId}</strong></p>
+        <p className="text-gray-700 mb-2">Điểm thưởng nhận được: <strong>{rewardPoints} điểm</strong></p>
         <p className="text-gray-700 mb-4">Trạng thái: <span className="px-2 py-1 bg-green-600 text-white text-xs font-semibold rounded">{paymentSuccess.status}</span></p>
         <button
           onClick={() => router.push('/')}
@@ -114,9 +131,15 @@ export default function CheckoutPage() {
         ) : (
           <p className="text-gray-500">Giỏ hàng trống.</p>
         )}
+        {orderSummary?.subtotal !== undefined && (
+          <div className="mt-3 space-y-1 text-sm">
+            <div className="flex justify-between"><span>Tạm tính:</span><span>{Number(orderSummary.subtotal).toLocaleString('vi-VN')} đ</span></div>
+            {Number(orderSummary.discountAmount || 0) > 0 && <div className="flex justify-between text-green-700"><span>Khuyến mãi ({orderSummary.promoCode}):</span><span>-{Number(orderSummary.discountAmount).toLocaleString('vi-VN')} đ</span></div>}
+          </div>
+        )}
         <div className="flex justify-between font-bold text-lg mt-4 pt-2 border-t">
           <span>Tổng tiền:</span>
-          <span className="text-blue-600">{totalAmount.toLocaleString('vi-VN')} đ</span>
+          <span className="text-blue-600">{Number(orderSummary?.total ?? totalAmount).toLocaleString('vi-VN')} đ</span>
         </div>
       
         </div>

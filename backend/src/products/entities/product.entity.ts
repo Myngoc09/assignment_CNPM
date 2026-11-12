@@ -22,4 +22,8 @@ export class Product {
 
   @Column({ default: 100 })
   stock: number;
+
+  // Incremented explicitly by the optimistic-lock stock update query.
+  @Column({ type: 'integer', default: 1 })
+  version: number;
 }
