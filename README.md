@@ -2,39 +2,118 @@
 
 # HƯỚNG DẪN CẬP NHẬT VÀ CHẠY BREWLITE BẰNG DOCKER
 
-## cài thư viện
-ở backend : npm.cmd install class-validator class-transformer
+## 1. Lấy code mới nhất
 
-## 1. Mở Docker Desktop
+Nếu đã clone project trước đó, mở Terminal tại thư mục dự án và chạy:
 
-Mở ứng dụng Docker Desktop, đợi Docker Engine khởi động hoàn tất.
+git pull origin task-10-3-inventory
 
-## 2. Mở Terminal tại thư mục dự án
-Kiểm tra Docker: docker info
+Nếu chưa có project, clone repository:
 
-## 3. Khởi động PostgreSQL bằng Docker
-chạy : docker compose up -d postgres
-Kiểm tra: docker compose ps
+git clone -b task-10-3-inventory https://github.com/Myngoc09/assignment_CNPM.git
+cd assignment_CNPM
 
-## 4. Kiểm tr[ \t]+$ kết nối database
-chạy : docker compose exec postgres pg_isready -U brewlite -d brewlite
+## 2. Chuẩn bị môi trường
 
-Nếu thấy accepting connections là PostgreSQL đã sẵn sàng.
+- Cài đặt Docker Desktop và mở ứng dụng.
+- Chờ Docker Engine khởi động hoàn tất.
+- Cài đặt Node.js và npm.
+- Tạo file `backend/.env` dựa trên `backend/.env.example`, sau đó cấu hình các biến môi trường cần thiết.
 
-## 5. Kiểm tra database đã có đủ bảng và dữ liệu chưa
-Kết nối: docker compose exec postgres psql -U brewlite -d brewlite
-Kiểm tra bảng: \dt
-Kiểm tra dữ liệu sản phẩm: SELECT * FROM products;
-Kiểm tra nguyên liệu: SELECT * FROM ingredients;
-Kiểm tra công thức định lượng : SELECT * FROM product_recipes;
-4 sản phẩm
-21 nguyên liệu
-62 dòng công thức định lượng nguyên liệu
+Kiểm tra Docker:
+
+docker info
+## 3. Cài đặt thư viện Backend
+
+Mở Terminal tại thư mục gốc dự án và chạy:
+
+cd backend
+npm.cmd install
+cd ..
+
+Lưu ý: Không cần cài riêng `class-validator` và `class-transformer` nếu hai thư viện này đã có trong `package.json`.
+
+## 4. Khởi tạo database lần đầu
+
+Chạy tại thư mục gốc dự án:
+
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-db.ps1
+
+Script sẽ tự động:
+- Khởi động PostgreSQL bằng Docker.
+- Kiểm tra database.
+- Chạy migration để tạo các bảng.
+- Nạp dữ liệu mẫu từ `initial-data.sql`.
+- Kiểm tra số lượng dữ liệu sau khi khởi tạo.
+
+Kết quả mong đợi:
+
+- 4 sản phẩm.
+- 21 nguyên liệu.
+- 62 dòng công thức định lượng nguyên liệu.
+
+Lưu ý:
+- Chỉ chạy bước này khi thiết lập database lần đầu.
+- Script sẽ dừng nếu database đã có bảng để tránh ghi đè dữ liệu.
+- Nếu database đã được khởi tạo trước đó thì bỏ qua bước này.
+
+## 5. Kiểm tra kết nối database
+
+Khởi động PostgreSQL:
+docker compose up -d postgres
+
+Kiểm tra container:
+
+docker compose ps
+
+Kiểm tra kết nối:
+
+docker compose exec postgres pg_isready -U brewlite -d brewlite
+
+Nếu hiển thị `accepting connections` nghĩa là PostgreSQL đã sẵn sàng.
+
+Có thể kiểm tra bảng và dữ liệu bằng cách kết nối:
+
+docker compose exec postgres psql -U brewlite -d brewlite
+
+Trong PostgreSQL, chạy:
+
+```sql
+\dt
+SELECT * FROM products; (chạy từng cái nha)
+SELECT * FROM ingredients;
+SELECT * FROM product_recipes;
+```
+
+Thoát PostgreSQL:\q 
 
 ## 6. Build và chạy toàn bộ dự án
-Khi database đã sẵn sàng: docker compose up -d --build
-rồi chạy : docker compose ps
-## 7. Các lỗi thường gặp
+
+Khi database đã sẵn sàng, chạy tại thư mục gốc:
+
+docker compose up -d --build
+
+Kiểm tra trạng thái các container:
+
+docker compose ps
+
+## 7. Những lần chạy tiếp theo
+
+Sau khi đã thiết lập database thành công lần đầu, những lần sau chỉ cần:
+
+docker compose up -d --build
+
+Kiểm tra:
+
+docker compose ps
+
+Không cần chạy lại script khởi tạo database, migration hoặc nạp dữ liệu mẫu.
+
+**Lưu ý quan trọng:**
+- Không chạy `docker compose down -v` vì có thể xóa dữ liệu database đã lưu.
+- Không chia sẻ file `.env` chứa mật khẩu hoặc thông tin bí mật lên GitHub.
+- Nếu gặp lỗi, kiểm tra trạng thái container bằng `docker compose ps` và xem log bằng `docker compose logs backend` hoặc `docker compose logs postgres`.
+## 8. Các lỗi thường gặp
 
 Docker daemon không hoạt động - > Mở Docker Desktop và đợi Docker Engine khởi động
 
