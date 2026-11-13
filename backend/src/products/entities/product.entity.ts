@@ -1,4 +1,10 @@
-import { Entity, PrimaryColumn, Column, VersionColumn } from 'typeorm';
+
+import {
+  Entity,
+  PrimaryColumn,
+  Column,
+  VersionColumn,
+} from 'typeorm';
 
 @Entity('products')
 export class Product {
@@ -20,9 +26,12 @@ export class Product {
   @Column('float')
   price: number;
 
-  @Column({ nullable: true })
-  imageUrl: string;
+  @Column({ type: 'varchar', nullable: true })
+  imageUrl: string| null;
 
   @Column({ default: 100 })
   stock: number;
+
+  @Column({ default: true })
+  isActive: boolean;
 }

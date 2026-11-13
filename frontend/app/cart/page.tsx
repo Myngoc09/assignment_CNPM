@@ -1,13 +1,65 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/useCartStore';
 import Link from 'next/link';
 
 export default function CartPage() {
+
   const router = useRouter();
-  const { items, updateQty, removeFromCart, getTotalPrice, clearCart } = useCartStore();
+
+  const {
+    items,
+    updateQty,
+    removeFromCart,
+    getTotalPrice,
+    clearCart,
+    setUserId: setCartUserId,
+  } = useCartStore();
+
   const [loading, setLoading] = useState(false);
+  const [checkingCart, setCheckingCart] = useState(true);
+
+  useEffect(() => {
+    const restoreCart = async () => {
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        setCartUserId(null);
+        setCheckingCart(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:3001/auth/profile', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('access_token');
+            setCartUserId(null);
+          }
+
+          return;
+        }
+
+        const profile = await response.json();
+
+        if (profile.id) {
+          setCartUserId(profile.id);
+        }
+      } catch (error) {
+        console.error('Lỗi khôi phục giỏ hàng:', error);
+      } finally {
+        setCheckingCart(false);
+      }
+    };
+
+    restoreCart();
+  }, [setCartUserId]);
 
   // [Chức năng mới] Gọi API POST /orders trước khi sang trang /checkout
   const handleProceedToCheckout = async () => {
@@ -70,6 +122,14 @@ export default function CartPage() {
       setLoading(false);
     }
   };
+
+  if (checkingCart) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7]">
+        <p className="text-[#1C2A24]">Đang khôi phục giỏ hàng...</p>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (

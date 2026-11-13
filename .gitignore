@@ -24,3 +24,5 @@ Thumbs.db
 
 # TypeScript build information
 *.tsbuildinfo
+.neon-restore.txt
+*.backup

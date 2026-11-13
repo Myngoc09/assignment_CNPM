@@ -67,13 +67,19 @@ export default function ProfilePage() {
     }
 
     fetch('http://localhost:3001/auth/profile', {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${token}`,
       },
     })
       .then(async (response) => {
-        if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('access_token');
           throw new Error('Phien dang nhap het han.');
+        }
+
+        if (!response.ok) {
+          throw new Error('Khong the tai thong tin tai khoan.');
         }
 
         return response.json();
@@ -83,7 +89,6 @@ export default function ProfilePage() {
         setCartUserId(data.id);
       })
       .catch(() => {
-        localStorage.removeItem('access_token');
         setProfile(null);
         setCartUserId(null);
       })
@@ -274,6 +279,14 @@ export default function ProfilePage() {
         localStorage.setItem('access_token', data.access_token);
 
         setCartUserId(data.user.id);
+
+        console.log('LOGIN USER:', data.user);
+
+        // Neu la Admin thi chuyen den trang quan tri
+        if (data.user.role === 'ADMIN') {
+          router.push('/admin/inventory');
+          return;
+        }
 
         // Lay san pham dang cho trong qua trinh dang nhap
         const pendingItem = sessionStorage.getItem('pending_cart_item');
@@ -706,7 +719,7 @@ export default function ProfilePage() {
                 <input
                   id="email"
                   type="email"
-                  autoComplete="email"
+                  autoComplete="off"
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
@@ -733,9 +746,7 @@ export default function ProfilePage() {
                 <input
                   id="password"
                   type="password"
-                  autoComplete={
-                    mode === 'login' ? 'current-password' : 'new-password'
-                  }
+                  autoComplete="new-password"
                   minLength={8}
                   maxLength={72}
                   required

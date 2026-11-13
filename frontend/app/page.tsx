@@ -53,19 +53,25 @@ export default function HomePage() {
 
       try {
         const response = await fetch('http://localhost:3001/auth/profile', {
+          cache: 'no-store',
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
 
+        if (response.status === 401 || response.status === 403) {
+          localStorage.removeItem('access_token');
+          setCartUserId(null);
+          return;
+        }
+
         if (!response.ok) {
-          throw new Error('Phien dang nhap het han.');
+          throw new Error('Khong the lay thong tin tai khoan.');
         }
 
         const profile = await response.json();
         setCartUserId(profile.id);
       } catch {
-        localStorage.removeItem('access_token');
         setCartUserId(null);
       }
     };

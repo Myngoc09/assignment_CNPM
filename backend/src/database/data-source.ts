@@ -13,6 +13,7 @@ import { Payment } from '../payments/entities/payment.entity';
 
 import { Ingredient } from '../inventory/entities/ingredient.entity';
 import { ProductRecipe } from '../inventory/entities/product-recipe.entity';
+import { ProductSizePrice } from '../products/entities/product-size-price.entity';
 import { OrderIngredient } from '../inventory/entities/order-ingredient.entity';
 import { InventoryTransaction } from '../inventory/entities/inventory-transaction.entity';
 
@@ -36,6 +37,7 @@ export const AppDataSource = new DataSource({
     ProductRecipe,
     OrderIngredient,
     InventoryTransaction,
+    ProductSizePrice,
   ],
 
   migrations: [__dirname + '/migrations/*{.ts,.js}'],

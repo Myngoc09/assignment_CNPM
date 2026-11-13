@@ -46,6 +46,7 @@ export class AuthService {
       birthDate: user.birthDate,
       address: user.address,
       createdAt: user.createdAt,
+      role: user.role,
     };
   }
 
@@ -118,6 +119,7 @@ export class AuthService {
     const payload = {
       sub: user.id,
       email: user.email,
+      role: user.role,
     };
 
     const accessToken =
@@ -131,6 +133,7 @@ export class AuthService {
         fullName: user.fullName,
         email: user.email,
         phone: user.phone,
+        role: user.role,
       },
     };
   }

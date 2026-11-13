@@ -2,13 +2,18 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+
 import { Product } from './entities/product.entity';
+import { ProductSizePrice } from './entities/product-size-price.entity';
 
 @Injectable()
 export class ProductsService implements OnModuleInit {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+
+    @InjectRepository(ProductSizePrice)
+    private readonly sizePriceRepository: Repository<ProductSizePrice>,
   ) {}
 
   async onModuleInit() {
@@ -66,12 +71,39 @@ export class ProductsService implements OnModuleInit {
   }
 
   async findAll() {
-    return await this.productRepository.find();
+    const products = await this.productRepository.find({
+      where: { isActive: true },
+    });
+
+    const prices = await this.sizePriceRepository.find();
+
+    return products.map((product) => ({
+      ...product,
+      prices: prices.filter(
+        (item) => item.productId === product.id,
+      ),
+    }));
   }
 
   async findOne(id: string) {
-    return await this.productRepository.findOne({
-      where: { id },
+    const product = await this.productRepository.findOne({
+      where: {
+        id,
+        isActive: true,
+      },
     });
+
+    if (!product) {
+      return null;
+    }
+
+    const prices = await this.sizePriceRepository.find({
+      where: { productId: id },
+    });
+
+    return {
+      ...product,
+      prices,
+    };
   }
 }

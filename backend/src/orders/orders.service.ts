@@ -5,17 +5,12 @@ import { DataSource, In, Repository } from 'typeorm';
 import { Order, OrderStatus } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
 import { Product } from '../products/entities/product.entity';
+import { ProductSizePrice } from '../products/entities/product-size-price.entity';
+import { BadRequestException } from '@nestjs/common';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { TOPPING_PRICE } from './dto/create-order-item.dto';
 import { InventoryService } from '../inventory/inventory.service';
 import { IngredientInventoryService } from '../inventory/ingredient-inventory.service';
-
-const SIZE_EXTRA: Record<string, number> = {
-  S: 0,
-  M: 5000,
-  L: 10000,
-  ONE_SIZE: 0,
-};
 
 @Injectable()
 export class OrdersService {
@@ -31,6 +26,7 @@ export class OrdersService {
     private readonly ingredientInventoryService: IngredientInventoryService,
   ) {}
 
+
   async createOrder(dto: CreateOrderDto, userId: string) {
     // 1. Lay danh sach productId khong trung nhau
     const productIds = [...new Set(dto.items.map((i) => i.productId))];
@@ -38,6 +34,7 @@ export class OrdersService {
     // 2. Lay thong tin san pham tu database
     const products = await this.productRepository.findBy({
       id: In(productIds),
+      isActive: true,
     });
 
     const productMap = new Map(products.map((p) => [p.id, p]));
@@ -46,11 +43,27 @@ export class OrdersService {
 
     if (missing.length) {
       throw new NotFoundException(
-        `San pham khong ton tai: ${missing.join(', ')}`,
+        `San pham khong ton tai hoac da ngung kinh doanh: ${missing.join(', ')}`,
       );
     }
 
-    // 3. Tinh gia don hang
+    // 3. Lay gia theo size tu database
+    const sizePrices = await this.dataSource
+      .getRepository(ProductSizePrice)
+      .find({
+        where: {
+          productId: In(productIds),
+        },
+      });
+
+    const priceMap = new Map(
+      sizePrices.map((item) => [
+        `${item.productId}_${item.size}`,
+        item.price,
+      ]),
+    );
+
+    // 4. Tinh gia don hang
     let orderTotal = 0;
     const orderItemsData: Partial<OrderItem>[] = [];
 
@@ -58,13 +71,22 @@ export class OrdersService {
       const product = productMap.get(item.productId)!;
       const toppings = item.toppings ?? [];
 
+      const sizePrice = priceMap.get(
+        `${item.productId}_${item.size}`,
+      );
+
+      if (sizePrice === undefined) {
+        throw new BadRequestException(
+          `San pham ${product.name} khong co size ${item.size}`,
+        );
+      }
+
       const toppingExtra = toppings.reduce(
         (sum, topping) => sum + (TOPPING_PRICE[topping] ?? 0),
         0,
       );
 
-      const unitPrice =
-        product.price + SIZE_EXTRA[item.size] + toppingExtra;
+      const unitPrice = sizePrice + toppingExtra;
 
       const lineTotal = unitPrice * item.qty;
       orderTotal += lineTotal;
@@ -80,14 +102,14 @@ export class OrdersService {
       });
     }
 
-    // 4. Tao transaction
+    // 5. Tao transaction
     const queryRunner = this.dataSource.createQueryRunner();
 
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // 5. Tru ton kho trong cung transaction
+      // 6. Tru ton kho trong cung transaction
       await this.inventoryService.decreaseStock(
         queryRunner.manager,
         dto.items.map((item) => ({
@@ -96,7 +118,7 @@ export class OrdersService {
         })),
       );
 
-      // 6. Tao don hang
+      // 7. Tao don hang
       const order = queryRunner.manager.create(Order, {
         userId,
         status: OrderStatus.PENDING,
@@ -105,7 +127,7 @@ export class OrdersService {
 
       const savedOrder = await queryRunner.manager.save(order);
 
-      // 7. Luu chi tiet don hang
+      // 8. Luu chi tiet don hang
       const itemsToSave = orderItemsData.map((item) =>
         queryRunner.manager.create(OrderItem, {
           ...item,
@@ -115,18 +137,17 @@ export class OrdersService {
 
       const savedItems = await queryRunner.manager.save(itemsToSave);
 
-      // 8. Giu nguyen lieu theo cong thuc va size
+      // 9. Giu nguyen lieu theo cong thuc va size
       await this.ingredientInventoryService.reserveIngredients(
         queryRunner.manager,
         savedOrder.id,
         savedItems,
       );
 
-      // 8. Hoan tat transaction
       await queryRunner.commitTransaction();
 
       return {
-        message: 'Tạo đơn hàng thành công',
+        message: 'Tao don hang thanh cong',
         orderId: savedOrder.id,
         status: savedOrder.status,
         total: savedOrder.total,
@@ -140,6 +161,7 @@ export class OrdersService {
       await queryRunner.release();
     }
   }
+
 
   // Xu ly lich su don hang cua user hien tai
   async getMyOrders(userId: string) {
