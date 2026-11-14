@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
+import { CreateIngredientDto } from './dto/create-ingredient.dto';
 
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,6 +27,12 @@ export class InventoryController {
   constructor(
     private readonly adminInventoryService: AdminInventoryService,
   ) {}
+
+  // POST /inventory/ingredients
+  @Post('ingredients')
+  createIngredient(@Body() dto: CreateIngredientDto) {
+    return this.adminInventoryService.createIngredient(dto);
+  }
 
   // GET /inventory/ingredients
   @Get('ingredients')

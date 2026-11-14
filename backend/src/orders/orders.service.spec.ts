@@ -4,14 +4,7 @@ import { OrdersService } from './orders.service';
 import { OrderStateMachineService } from './services/order-state-machine.service';
 
 describe('OrdersService inventory optimistic locking', () => {
-  it('rejects an order when product version changed concurrently', async () => {
-    const updateQueryBuilder = {
-      update: jest.fn().mockReturnThis(),
-      set: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      execute: jest.fn().mockResolvedValue({ affected: 0 }),
-    };
-
+  it('rejects a ONE_SIZE order when product version changed concurrently', async () => {
     const manager = {
       findOne: jest.fn().mockResolvedValue({
         id: 'user-1',
@@ -21,18 +14,19 @@ describe('OrdersService inventory optimistic locking', () => {
       find: jest.fn()
         .mockResolvedValueOnce([
           {
-            id: 'coffee-1',
-            name: 'Ca phe sua',
+            id: 'croissant-1',
+            name: 'Banh Croissant',
             price: 30000,
             stock: 1,
             version: 2,
             isActive: true,
+            inventoryMode: 'FINISHED_GOOD',
           },
         ])
         .mockResolvedValueOnce([
           {
-            productId: 'coffee-1',
-            size: 'M',
+            productId: 'croissant-1',
+            size: 'ONE_SIZE',
             price: 30000,
           },
         ]),
@@ -55,14 +49,17 @@ describe('OrdersService inventory optimistic locking', () => {
     };
 
     const orderRepository = {};
+
     const inventoryService = {
       decreaseStock: jest.fn().mockRejectedValue(
         new ConflictException('Tồn kho đã thay đổi'),
       ),
     };
+
     const ingredientInventoryService = {
       reserveIngredients: jest.fn(),
     };
+
     const promotionsService = {
       assertUsable: jest.fn(),
       calculateDiscount: jest.fn(),
@@ -82,8 +79,8 @@ describe('OrdersService inventory optimistic locking', () => {
         {
           items: [
             {
-              productId: 'coffee-1',
-              size: 'M',
+              productId: 'croissant-1',
+              size: 'ONE_SIZE',
               qty: 1,
             },
           ],
@@ -92,7 +89,19 @@ describe('OrdersService inventory optimistic locking', () => {
       ),
     ).rejects.toThrow(ConflictException);
 
-    expect(inventoryService.decreaseStock).toHaveBeenCalled();
-    expect(updateQueryBuilder.where).not.toHaveBeenCalled();
+    expect(inventoryService.decreaseStock).toHaveBeenCalledWith(
+      manager,
+      [
+        {
+          productId: 'croissant-1',
+          quantity: 1,
+        },
+      ],
+    );
+
+    // ONE_SIZE không giữ nguyên liệu.
+    expect(
+      ingredientInventoryService.reserveIngredients,
+    ).not.toHaveBeenCalled();
   });
 });

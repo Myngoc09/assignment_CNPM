@@ -79,6 +79,12 @@ export default function AdminInventoryPage() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createUnit, setCreateUnit] = useState('g');
+  const [createInitialStock, setCreateInitialStock] = useState('0');
+  const [creating, setCreating] = useState(false);
+
   const getToken = () => localStorage.getItem('access_token');
 
   const loadData = useCallback(async () => {
@@ -242,6 +248,82 @@ export default function AdminInventoryPage() {
     }
   };
 
+  const handleCreateIngredient = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    const name = createName.trim();
+    const unit = createUnit.trim();
+    const initialStock = Number(createInitialStock);
+
+    if (!name || !unit) {
+      setMessage('Vui lòng nhập tên và đơn vị nguyên liệu.');
+      return;
+    }
+
+    if (!Number.isFinite(initialStock) || initialStock < 0) {
+      setMessage('Tồn kho ban đầu không hợp lệ.');
+      return;
+    }
+
+    setCreating(true);
+    setMessage('');
+    setError('');
+
+    try {
+      const token = getToken();
+
+      if (!token) {
+        router.replace('/profile');
+        return;
+      }
+
+      const response = await fetch(
+        `${API_URL}/inventory/ingredients`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name,
+            unit,
+            initialStock,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          Array.isArray(data.message)
+            ? data.message.join(', ')
+            : data.message || 'Không thể tạo nguyên liệu.',
+        );
+      }
+
+      setMessage('Thêm nguyên liệu thành công.');
+
+      setCreateModalOpen(false);
+      setCreateName('');
+      setCreateUnit('g');
+      setCreateInitialStock('0');
+
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Không thể kết nối đến máy chủ.',
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#FDFBF7] flex items-center justify-center text-[#1C2A24]">
@@ -340,12 +422,30 @@ export default function AdminInventoryPage() {
               </p>
             </div>
 
-            <button
-              onClick={loadData}
-              className="rounded-full border border-[#D8D0C3] px-4 py-2 text-sm hover:bg-[#FDFBF7]"
-            >
-              Làm mới dữ liệu
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCreateName('');
+                  setCreateUnit('g');
+                  setCreateInitialStock('0');
+                  setCreateModalOpen(true);
+                  setMessage('');
+                  setError('');
+                }}
+                className="rounded-full bg-[#1C2A24] px-4 py-2 text-sm text-white hover:bg-[#344A3E]"
+              >
+                + Thêm nguyên liệu
+              </button>
+
+              <button
+                type="button"
+                onClick={loadData}
+                className="rounded-full border border-[#D8D0C3] px-4 py-2 text-sm hover:bg-[#FDFBF7]"
+              >
+                Làm mới dữ liệu
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -353,9 +453,24 @@ export default function AdminInventoryPage() {
               <thead className="bg-[#F8F5EF] text-gray-600">
                 <tr>
                   <th className="p-4">Nguyên liệu</th>
-                  <th className="p-4">Tổng tồn</th>
-                  <th className="p-4">Đang giữ</th>
-                  <th className="p-4">Khả dụng</th>
+                  <th className="p-4">
+                    Tổng tồn kho
+                    <span className="mt-1 block text-xs font-normal text-gray-500">
+                      Bao gồm hàng đang giữ
+                    </span>
+                  </th>
+                  <th className="p-4">
+                    Đã giữ
+                    <span className="mt-1 block text-xs font-normal text-gray-500">
+                      Dành cho đơn hàng
+                    </span>
+                  </th>
+                  <th className="p-4">
+                    Còn khả dụng
+                    <span className="mt-1 block text-xs font-normal text-gray-500">
+                      Có thể sử dụng tiếp
+                    </span>
+                  </th>
                   <th className="p-4">Thao tác</th>
                 </tr>
               </thead>
@@ -545,6 +660,96 @@ export default function AdminInventoryPage() {
                 className="px-5 py-2.5 rounded-full bg-[#1C2A24] text-white disabled:opacity-50"
               >
                 {saving ? 'Đang lưu...' : 'Xác nhận'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {createModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form
+            onSubmit={handleCreateIngredient}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <h2 className="mb-2 text-xl font-serif font-semibold">
+              Thêm nguyên liệu mới
+            </h2>
+
+            <p className="mb-5 text-sm text-gray-500">
+              Tạo nguyên liệu để sử dụng khi cấu hình công thức sản phẩm.
+            </p>
+
+            <label className="mb-2 block text-sm font-medium">
+              Tên nguyên liệu
+            </label>
+
+            <input
+              type="text"
+              value={createName}
+              onChange={(event) => setCreateName(event.target.value)}
+              maxLength={255}
+              required
+              placeholder="Ví dụ: Bột matcha"
+              className="mb-4 w-full rounded-xl border border-[#D8D0C3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#1C2A24]"
+            />
+
+            <label className="mb-2 block text-sm font-medium">
+              Đơn vị tính
+            </label>
+
+            <select
+              value={createUnit}
+              onChange={(event) => setCreateUnit(event.target.value)}
+              required
+              className="mb-4 w-full rounded-xl border border-[#D8D0C3] bg-white px-4 py-3 outline-none focus:ring-2 focus:ring-[#1C2A24]"
+            >
+              <option value="g">Gram (g)</option>
+              <option value="ml">Mililit (ml)</option>
+              <option value="cai">Cái</option>
+              <option value="qua">Quả</option>
+              <option value="mieng">Miếng</option>
+              <option value="cay">Cây</option>
+              <option value="tui">Túi</option>
+            </select>
+
+            <label className="mb-2 block text-sm font-medium">
+              Số lượng tồn kho ban đầu
+            </label>
+
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={createInitialStock}
+              onChange={(event) =>
+                setCreateInitialStock(event.target.value)
+              }
+              required
+              className="mb-2 w-full rounded-xl border border-[#D8D0C3] px-4 py-3 outline-none focus:ring-2 focus:ring-[#1C2A24]"
+              placeholder="Nhập số lượng"
+            />
+
+            <p className="mb-5 text-xs text-gray-400">
+              Có thể nhập 0 nếu chưa có hàng trong kho.
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setCreateModalOpen(false)}
+                disabled={creating}
+                className="rounded-full border border-[#D8D0C3] px-4 py-2.5 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+
+              <button
+                type="submit"
+                disabled={creating}
+                className="rounded-full bg-[#1C2A24] px-5 py-2.5 text-white disabled:opacity-50"
+              >
+                {creating ? 'Đang lưu...' : 'Tạo nguyên liệu'}
               </button>
             </div>
           </form>

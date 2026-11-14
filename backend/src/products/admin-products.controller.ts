@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Patch,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../users/entities/user.entity';
+import { SaveProductRecipesDto } from './dto/save-product-recipes.dto';
 
 @Controller('admin/products')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -25,6 +27,19 @@ export class AdminProductsController {
   constructor(
     private readonly adminProductsService: AdminProductsService,
   ) {}
+
+  @Get(':id/recipes')
+  getRecipes(@Param('id') id: string) {
+    return this.adminProductsService.getRecipes(id);
+  }
+
+  @Put(':id/recipes')
+  saveRecipes(
+    @Param('id') id: string,
+    @Body() dto: SaveProductRecipesDto,
+  ) {
+    return this.adminProductsService.saveRecipes(id, dto);
+  }
 
   @Get()
   findAll() {

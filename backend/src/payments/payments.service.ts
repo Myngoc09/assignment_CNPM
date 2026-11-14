@@ -14,7 +14,8 @@ import {
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+import { Product } from '../products/entities/product.entity';
 
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrderItem } from '../orders/entities/order-item.entity';
@@ -144,11 +145,32 @@ export class PaymentsService {
                 where: { orderId: order.id },
               });
 
-              await this.ingredientInventoryService.reserveIngredients(
-                manager,
-                order.id,
-                orderItems,
+              // Lấy thông tin chế độ quản lý tồn kho của sản phẩm.
+              const productIds = [
+                ...new Set(orderItems.map((item) => item.productId)),
+              ];
+
+              const products = await manager.find(Product, {
+                where: { id: In(productIds) },
+              });
+
+              const productMap = new Map(
+                products.map((product) => [product.id, product]),
               );
+
+              // Chỉ giữ lại nguyên liệu cho sản phẩm INGREDIENT.
+              const ingredientItems = orderItems.filter(
+                (item) =>
+                  productMap.get(item.productId)?.inventoryMode === 'INGREDIENT',
+              );
+
+              if (ingredientItems.length > 0) {
+                await this.ingredientInventoryService.reserveIngredients(
+                  manager,
+                  order.id,
+                  ingredientItems,
+                );
+              }
 
               order.status = this.orderStateMachine.transition(
                 order.status,

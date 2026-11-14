@@ -7,7 +7,7 @@ export interface CartItem {
   productId: string;
   name: string;
   price: number;
-  size: 'S' | 'M' | 'L';
+  size: 'S' | 'M' | 'L' | 'ONE_SIZE';
   topping?: string;
   qty: number;
   imageUrl?: string;

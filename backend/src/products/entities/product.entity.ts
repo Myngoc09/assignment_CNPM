@@ -6,6 +6,10 @@ import {
   VersionColumn,
 } from 'typeorm';
 
+export type ProductInventoryMode =
+  | 'INGREDIENT'
+  | 'FINISHED_GOOD';
+
 @Entity('products')
 export class Product {
   @PrimaryColumn({ type: 'varchar' })
@@ -31,6 +35,13 @@ export class Product {
 
   @Column({ default: 100 })
   stock: number;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: 'INGREDIENT',
+  })
+  inventoryMode: ProductInventoryMode;
 
   @Column({ default: true })
   isActive: boolean;

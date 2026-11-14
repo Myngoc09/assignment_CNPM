@@ -97,7 +97,7 @@ export default function HomePage() {
       productId: product.id,
       name: product.name,
       price: totalPrice,
-      size: size as 'S' | 'M' | 'L',
+      size: size as 'S' | 'M' | 'L' | 'ONE_SIZE',
       topping: toppings.length > 0 ? toppings.join(', ') : undefined,
       qty: 1,
       imageUrl: product.imageUrl,

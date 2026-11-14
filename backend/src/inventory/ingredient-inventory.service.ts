@@ -40,8 +40,17 @@ export class IngredientInventoryService {
 
     const requiredIngredients = new Map<string, number>();
 
-    // Lay nguyen lieu theo cong thuc tung san pham
+    // Lay dung cong thuc theo size cua tung san pham
     for (const item of items) {
+      if (
+        !Number.isSafeInteger(item.qty) ||
+        item.qty <= 0
+      ) {
+        throw new BadRequestException(
+          `So luong san pham ${item.productId} khong hop le`,
+        );
+      }
+
       const recipes = await recipeRepository.find({
         where: {
           productId: item.productId,
@@ -49,37 +58,39 @@ export class IngredientInventoryService {
         },
       });
 
-      const selectedRecipes =
-        recipes.length > 0
-          ? recipes
-          : await recipeRepository.find({
-              where: {
-                productId: item.productId,
-                size: 'ONE_SIZE',
-              },
-            });
-
-      if (selectedRecipes.length === 0) {
+      if (recipes.length === 0) {
         throw new BadRequestException(
-          `Chua co cong thuc nguyen lieu cho san pham ${item.productId}, size ${item.size}`,
+          `Chua co cong thuc cho san pham ${item.productId}, size ${item.size}`,
         );
       }
 
-      for (const recipe of selectedRecipes) {
-        const requiredQuantity = recipe.quantity * item.qty;
+      for (const recipe of recipes) {
+        if (
+          !Number.isFinite(recipe.quantity) ||
+          recipe.quantity <= 0
+        ) {
+          throw new BadRequestException(
+            `Dinh luong nguyen lieu ${recipe.ingredientId} khong hop le`,
+          );
+        }
+
+        const requiredQuantity =
+          recipe.quantity * item.qty;
 
         requiredIngredients.set(
           recipe.ingredientId,
-          (requiredIngredients.get(recipe.ingredientId) || 0) +
+          (requiredIngredients.get(recipe.ingredientId) ?? 0) +
             requiredQuantity,
         );
       }
     }
 
-    // Kiem tra don hang da duoc giu nguyen lieu chua
-    const existingReservations = await orderIngredientRepository.find({
-      where: { orderId },
-    });
+    // Kiem tra reservation cu cua don hang
+    const existingReservations =
+      await orderIngredientRepository.find({
+        where: { orderId },
+        lock: { mode: 'pessimistic_write' },
+      });
 
     if (
       existingReservations.some(
@@ -93,17 +104,39 @@ export class IngredientInventoryService {
     }
 
     if (
-      existingReservations.length > 0 &&
-      existingReservations.every(
+      existingReservations.some(
         (reservation) =>
           reservation.status === ReservationStatus.RESERVED,
       )
     ) {
-      return;
+      const allReserved =
+        existingReservations.length === requiredIngredients.size &&
+        existingReservations.every(
+          (reservation) =>
+            reservation.status === ReservationStatus.RESERVED &&
+            requiredIngredients.get(reservation.ingredientId) ===
+              reservation.quantity,
+        );
+
+      if (allReserved) {
+        return;
+      }
+
+      throw new ConflictException(
+        'Trang thai giu nguyen lieu cua don hang khong dong nhat',
+      );
     }
 
+    const existingIngredientIds = new Set(
+      existingReservations.map(
+        (reservation) => reservation.ingredientId,
+      ),
+    );
+
     // Khoa nguyen lieu theo thu tu ID
-    const ingredientIds = [...requiredIngredients.keys()].sort();
+    const ingredientIds = [
+      ...requiredIngredients.keys(),
+    ].sort();
 
     const lockedIngredients = new Map<string, Ingredient>();
 
@@ -123,7 +156,13 @@ export class IngredientInventoryService {
       const availableStock =
         ingredient.stock - ingredient.reservedStock;
 
-      if (availableStock < quantity) {
+      if (
+        !Number.isFinite(ingredient.stock) ||
+        !Number.isFinite(ingredient.reservedStock) ||
+        ingredient.stock < 0 ||
+        ingredient.reservedStock < 0 ||
+        availableStock < quantity
+      ) {
         throw new BadRequestException(
           `Khong du ${ingredient.name}. Con lai: ${availableStock} ${ingredient.unit}, can: ${quantity} ${ingredient.unit}`,
         );
@@ -132,10 +171,9 @@ export class IngredientInventoryService {
       lockedIngredients.set(ingredientId, ingredient);
     }
 
-    // Tang so luong dang duoc giu va ghi lich su RESERVE
+    // Tang so luong dang duoc giu
     for (const [ingredientId, quantity] of requiredIngredients) {
       const ingredient = lockedIngredients.get(ingredientId)!;
-
       const stockBefore = ingredient.stock;
 
       ingredient.reservedStock += quantity;
@@ -155,10 +193,11 @@ export class IngredientInventoryService {
       );
     }
 
-    // Luu chi tiet nguyen lieu cua don hang
+    // Cap nhat reservation cu hoac tao moi
     for (const [ingredientId, quantity] of requiredIngredients) {
       const existing = existingReservations.find(
-        (reservation) => reservation.ingredientId === ingredientId,
+        (reservation) =>
+          reservation.ingredientId === ingredientId,
       );
 
       const reservation = existing
@@ -172,6 +211,18 @@ export class IngredientInventoryService {
       reservation.status = ReservationStatus.RESERVED;
 
       await orderIngredientRepository.save(reservation);
+    }
+
+    // Khong cho phep reservation cu con nguyen lieu khong con trong cong thuc
+    for (const reservation of existingReservations) {
+      if (
+        !requiredIngredients.has(reservation.ingredientId) &&
+        existingIngredientIds.has(reservation.ingredientId)
+      ) {
+        throw new ConflictException(
+          'Cong thuc nguyen lieu cua don hang da thay doi',
+        );
+      }
     }
   }
 
@@ -198,9 +249,13 @@ export class IngredientInventoryService {
       return;
     }
 
-    const ingredientIds = reservations
-      .map((reservation) => reservation.ingredientId)
-      .sort();
+    const ingredientIds = [
+      ...new Set(
+        reservations.map(
+          (reservation) => reservation.ingredientId,
+        ),
+      ),
+    ].sort();
 
     const lockedIngredients = new Map<string, Ingredient>();
 
@@ -243,7 +298,6 @@ export class IngredientInventoryService {
       await ingredientRepository.save(ingredient);
       await orderIngredientRepository.save(reservation);
 
-      // Ghi lich su SALE
       await transactionRepository.save(
         transactionRepository.create({
           ingredientId: ingredient.id,
@@ -281,9 +335,13 @@ export class IngredientInventoryService {
       return;
     }
 
-    const ingredientIds = reservations
-      .map((reservation) => reservation.ingredientId)
-      .sort();
+    const ingredientIds = [
+      ...new Set(
+        reservations.map(
+          (reservation) => reservation.ingredientId,
+        ),
+      ),
+    ].sort();
 
     const lockedIngredients = new Map<string, Ingredient>();
 
@@ -307,7 +365,10 @@ export class IngredientInventoryService {
         reservation.ingredientId,
       )!;
 
-      if (ingredient.reservedStock < reservation.quantity) {
+      if (
+        ingredient.reservedStock < reservation.quantity ||
+        ingredient.reservedStock < 0
+      ) {
         throw new ConflictException(
           `So luong nguyen lieu dang giu cua ${ingredient.name} khong hop le`,
         );
@@ -321,7 +382,6 @@ export class IngredientInventoryService {
       await ingredientRepository.save(ingredient);
       await orderIngredientRepository.save(reservation);
 
-      // Ghi lich su RELEASE
       await transactionRepository.save(
         transactionRepository.create({
           ingredientId: ingredient.id,

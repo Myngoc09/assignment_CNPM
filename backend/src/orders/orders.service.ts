@@ -151,14 +151,34 @@ export class OrdersService {
         );
       }
 
-      // 5. Trừ tồn kho sản phẩm trong transaction hiện tại.
-      await this.inventoryService.decreaseStock(
-        manager,
-        dto.items.map((item) => ({
-          productId: item.productId,
-          quantity: item.qty,
-        })),
+      // 5. Phân loại tồn kho theo inventoryMode.
+      const invalidInventoryItems = dto.items.filter((item) => {
+        const mode = productMap.get(item.productId)?.inventoryMode;
+
+        return mode !== 'INGREDIENT' && mode !== 'FINISHED_GOOD';
+      });
+
+      if (invalidInventoryItems.length > 0) {
+        throw new BadRequestException(
+          'Loại quản lý tồn kho không hợp lệ',
+        );
+      }
+
+      const finishedGoodItems = dto.items.filter(
+        (item) =>
+          productMap.get(item.productId)?.inventoryMode === 'FINISHED_GOOD',
       );
+
+      // Chỉ trừ tồn kho thành phẩm.
+      if (finishedGoodItems.length > 0) {
+        await this.inventoryService.decreaseStock(
+          manager,
+          finishedGoodItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.qty,
+          })),
+        );
+      }
 
       // 6. Kiểm tra và áp dụng mã khuyến mãi.
       let promoCode: string | null = null;
@@ -278,13 +298,19 @@ export class OrdersService {
         itemsToSave,
       );
 
-      // 10. Giữ nguyên liệu theo công thức và size.
-      await this.ingredientInventoryService.reserveIngredients(
-        manager,
-        savedOrder.id,
-        savedItems,
+      // 10. Giữ nguyên liệu cho tất cả sản phẩm quản lý theo INGREDIENT.
+      const itemsUsingIngredients = savedItems.filter(
+        (item) =>
+          productMap.get(item.productId)?.inventoryMode === 'INGREDIENT',
       );
 
+      if (itemsUsingIngredients.length > 0) {
+        await this.ingredientInventoryService.reserveIngredients(
+          manager,
+          savedOrder.id,
+          itemsUsingIngredients,
+        );
+      }
       return {
         message: 'Tạo đơn hàng thành công',
         orderId: savedOrder.id,
@@ -337,25 +363,50 @@ export class OrdersService {
           where: { orderId: order.id },
         });
 
+        const productIds = [
+          ...new Set(items.map((item) => item.productId)),
+        ];
+
+        const products = await manager.find(Product, {
+          where: { id: In(productIds) },
+        });
+
+        const productMap = new Map(
+          products.map((product) => [product.id, product]),
+        );
+
         for (const item of items) {
-          await manager
-            .createQueryBuilder()
-            .update(Product)
-            .set({
-              stock: () => `"stock" + ${item.qty}`,
-              version: () => '"version" + 1',
-            })
-            .where('"id" = :id', {
-              id: item.productId,
-            })
-            .execute();
+          const product = productMap.get(item.productId);
+
+          if (!product) {
+            throw new NotFoundException(
+              `Không tìm thấy sản phẩm ${item.productId}`,
+            );
+          }
+
+          // Chỉ hoàn tồn kho thành phẩm.
+          if (product.inventoryMode === 'FINISHED_GOOD') {
+            await manager
+              .createQueryBuilder()
+              .update(Product)
+              .set({
+                stock: () => `"stock" + ${item.qty}`,
+                version: () => '"version" + 1',
+              })
+              .where('"id" = :id', {
+                id: item.productId,
+              })
+              .execute();
+          }
         }
 
+        // Giải phóng nguyên liệu đã giữ.
         await this.ingredientInventoryService.releaseIngredients(
           manager,
           order.id,
         );
 
+        // Hoàn lại lượt sử dụng mã khuyến mãi.
         if (order.promoCode) {
           const promo = await manager.findOne(PromoCode, {
             where: { code: order.promoCode },
@@ -368,7 +419,6 @@ export class OrdersService {
           }
         }
       }
-
       await manager.save(Order, order);
 
       return {

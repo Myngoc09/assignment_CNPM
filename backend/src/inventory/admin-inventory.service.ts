@@ -13,11 +13,74 @@ import {
 } from './entities/inventory-transaction.entity';
 import { ImportIngredientDto } from './dto/import-ingredient.dto';
 import { AdjustIngredientDto } from './dto/adjust-ingredient.dto';
+import { CreateIngredientDto } from './dto/create-ingredient.dto';
 
 @Injectable()
 export class AdminInventoryService {
   constructor(private readonly dataSource: DataSource) {}
 
+  // Tao nguyen lieu moi
+  async createIngredient(dto: CreateIngredientDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const ingredientRepository =
+        manager.getRepository(Ingredient);
+      const transactionRepository =
+        manager.getRepository(InventoryTransaction);
+
+      const name = dto.name.trim();
+      const unit = dto.unit.trim();
+      const initialStock = dto.initialStock ?? 0;
+
+      if (!name || !unit) {
+        throw new BadRequestException(
+          'Ten nguyen lieu va don vi tinh khong duoc de trong',
+        );
+      }
+
+      const existingIngredient = await ingredientRepository.findOne({
+        where: { name },
+      });
+
+      if (existingIngredient) {
+        throw new BadRequestException(
+          'Nguyen lieu nay da ton tai',
+        );
+      }
+
+      const ingredient = ingredientRepository.create({
+        name,
+        unit,
+        stock: initialStock,
+        reservedStock: 0,
+      });
+
+      const savedIngredient =
+        await ingredientRepository.save(ingredient);
+
+      // Chi ghi nhan IMPORT khi co ton kho ban dau
+      if (initialStock > 0) {
+        await transactionRepository.save(
+          transactionRepository.create({
+            ingredientId: savedIngredient.id,
+            type: InventoryTransactionType.IMPORT,
+            quantity: initialStock,
+            stockBefore: 0,
+            stockAfter: initialStock,
+            note: 'Tao nguyen lieu - Nhap ton kho ban dau',
+          }),
+        );
+      }
+
+      return {
+        message: 'Tao nguyen lieu thanh cong',
+        ingredient: {
+          ...savedIngredient,
+          availableStock:
+            savedIngredient.stock - savedIngredient.reservedStock,
+        },
+      };
+    });
+  }
   // Lay danh sach nguyen lieu
   async getIngredients() {
     const ingredients = await this.dataSource

@@ -21,6 +21,10 @@ type Product = {
   stock: number;
   isActive: boolean;
   prices: SizePrice[];
+  sellableBySize?: Partial<
+    Record<'S' | 'M' | 'L' | 'ONE_SIZE', number>
+  >;
+  missingRecipeSizes?: string[];
 };
 
 type ProductForm = {
@@ -34,6 +38,25 @@ type ProductForm = {
   priceL: string;
   priceOne: string;
 };
+
+type Ingredient = {
+  id: string;
+  name: string;
+  unit: string;
+  stock: number;
+  reservedStock: number;
+  availableStock: number;
+};
+
+type RecipeSize = 'S' | 'M' | 'L' | 'ONE_SIZE';
+
+type RecipeRow = {
+  ingredientId: string;
+  size: RecipeSize;
+  quantity: string;
+};
+
+type RecipeMap = Record<RecipeSize, RecipeRow[]>;
 
 const emptyForm: ProductForm = {
   name: '',
@@ -82,6 +105,18 @@ export default function AdminProductsPage() {
     useState<Product | null>(null);
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  const [recipeModalOpen, setRecipeModalOpen] = useState(false);
+  const [recipeProduct, setRecipeProduct] = useState<Product | null>(null);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [recipeRows, setRecipeRows] = useState<RecipeMap>({
+    S: [],
+    M: [],
+    L: [],
+    ONE_SIZE: [],
+  });
+  const [recipeLoading, setRecipeLoading] = useState(false);
+  const [recipeSaving, setRecipeSaving] = useState(false);
 
   const loadProducts = useCallback(async () => {
     const token = getToken();
@@ -214,8 +249,8 @@ export default function AdminProductsPage() {
     const prices = buildPrices();
 
     if (
-      !Number.isInteger(stock) ||
-      stock < 0
+      form.sizeMode === 'ONE_SIZE' &&
+      (!Number.isInteger(stock) || stock < 0)
     ) {
       setMessage('Số lượng tồn kho phải là số nguyên không âm.');
       return;
@@ -243,7 +278,7 @@ export default function AdminProductsPage() {
       name: form.name.trim(),
       category: form.category.trim(),
       imageUrl: form.imageUrl.trim() || undefined,
-      stock,
+      ...(form.sizeMode === 'ONE_SIZE' ? { stock } : {}),
       prices,
     };
 
@@ -332,6 +367,236 @@ export default function AdminProductsPage() {
           ? err.message
           : 'Không thể cập nhật trạng thái.',
       );
+    }
+  };
+
+  const openRecipeModal = async (product: Product) => {
+    const token = getToken();
+
+    if (!token) {
+      window.location.href = '/profile';
+      return;
+    }
+
+    setRecipeProduct(product);
+    setRecipeModalOpen(true);
+    setRecipeLoading(true);
+    setMessage('');
+
+    try {
+      const [ingredientResponse, recipeResponse] = await Promise.all([
+        fetch(`${API_URL}/inventory/ingredients`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+        fetch(`${API_URL}/admin/products/${product.id}/recipes`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }),
+      ]);
+
+      if (!ingredientResponse.ok) {
+        throw new Error(await getErrorMessage(ingredientResponse));
+      }
+
+      if (!recipeResponse.ok) {
+        throw new Error(await getErrorMessage(recipeResponse));
+      }
+
+      const ingredientData: Ingredient[] =
+        await ingredientResponse.json();
+
+      const recipeData = await recipeResponse.json();
+
+      setIngredients(ingredientData);
+
+      const oneSize = product.prices.some(
+        (item) => item.size === 'ONE_SIZE',
+      );
+
+      const sizes: RecipeSize[] = oneSize
+        ? ['ONE_SIZE']
+        : ['S', 'M', 'L'];
+
+      const initialRows = {
+        S: [],
+        M: [],
+        L: [],
+        ONE_SIZE: [],
+      } as RecipeMap;
+
+      sizes.forEach((size) => {
+        const existingRows = recipeData
+          .filter((item: any) => item.size === size)
+          .map((item: any) => ({
+            ingredientId: item.ingredientId,
+            size,
+            quantity: String(item.quantity),
+          }));
+
+        initialRows[size] = existingRows.length
+          ? existingRows
+          : [{ ingredientId: '', size, quantity: '' }];
+      });
+
+      setRecipeRows(initialRows);
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'Không thể tải công thức nguyên liệu.',
+      );
+      setRecipeModalOpen(false);
+    } finally {
+      setRecipeLoading(false);
+    }
+  };
+
+  const updateRecipeRow = (
+    size: RecipeSize,
+    index: number,
+    field: 'ingredientId' | 'quantity',
+    value: string,
+  ) => {
+    setRecipeRows((current) => ({
+      ...current,
+      [size]: current[size].map((row, rowIndex) =>
+        rowIndex === index
+          ? { ...row, [field]: value }
+          : row,
+      ),
+    }));
+  };
+
+  const addRecipeRow = (size: RecipeSize) => {
+    setRecipeRows((current) => ({
+      ...current,
+      [size]: [
+        ...current[size],
+        { ingredientId: '', size, quantity: '' },
+      ],
+    }));
+  };
+
+  const removeRecipeRow = (
+    size: RecipeSize,
+    index: number,
+  ) => {
+    setRecipeRows((current) => ({
+      ...current,
+      [size]: current[size].filter(
+        (_, rowIndex) => rowIndex !== index,
+      ),
+    }));
+  };
+
+  const closeRecipeModal = () => {
+    if (recipeSaving || recipeLoading) return;
+
+    setRecipeModalOpen(false);
+    setRecipeProduct(null);
+  };
+
+  const saveRecipes = async () => {
+    if (!recipeProduct) return;
+
+    const token = getToken();
+
+    if (!token) {
+      window.location.href = '/profile';
+      return;
+    }
+
+    const oneSize = recipeProduct.prices.some(
+      (item) => item.size === 'ONE_SIZE',
+    );
+
+    const sizes: RecipeSize[] = oneSize
+      ? ['ONE_SIZE']
+      : ['S', 'M', 'L'];
+
+    const recipes: {
+      ingredientId: string;
+      size: RecipeSize;
+      quantity: number;
+    }[] = [];
+
+    for (const size of sizes) {
+      const rows = recipeRows[size];
+
+      if (rows.length === 0) {
+        setMessage(`Size ${size} cần ít nhất một nguyên liệu.`);
+        return;
+      }
+
+      const usedIngredients = new Set<string>();
+
+      for (const row of rows) {
+        const quantity = Number(row.quantity);
+
+        if (
+          !row.ingredientId ||
+          !Number.isFinite(quantity) ||
+          quantity <= 0
+        ) {
+          setMessage(
+            `Vui lòng chọn nguyên liệu và nhập định lượng hợp lệ cho size ${size}.`,
+          );
+          return;
+        }
+
+        if (usedIngredients.has(row.ingredientId)) {
+          setMessage(
+            `Size ${size} không được chọn trùng một nguyên liệu.`,
+          );
+          return;
+        }
+
+        usedIngredients.add(row.ingredientId);
+
+        recipes.push({
+          ingredientId: row.ingredientId,
+          size,
+          quantity,
+        });
+      }
+    }
+
+    setRecipeSaving(true);
+    setMessage('');
+
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/products/${recipeProduct.id}/recipes`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ recipes }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await getErrorMessage(response));
+      }
+
+      setRecipeModalOpen(false);
+      setRecipeProduct(null);
+      setMessage('Đã lưu công thức nguyên liệu thành công.');
+
+      await loadProducts();
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : 'Không thể lưu công thức nguyên liệu.',
+      );
+    } finally {
+      setRecipeSaving(false);
     }
   };
 
@@ -471,7 +736,12 @@ export default function AdminProductsPage() {
                   <th className="p-4">Sản phẩm</th>
                   <th className="p-4">Danh mục</th>
                   <th className="p-4">Giá bán</th>
-                  <th className="p-4">Tồn kho</th>
+                  <th className="p-4">
+                    Tồn kho khả dụng
+                    <span className="mt-1 block text-xs font-normal text-gray-500">
+                      Tính riêng theo từng size
+                    </span>
+                  </th>
                   <th className="p-4">Trạng thái</th>
                   <th className="p-4">Thao tác</th>
                 </tr>
@@ -528,8 +798,44 @@ export default function AdminProductsPage() {
                       </div>
                     </td>
 
-                    <td className="p-4 font-medium">
-                      {formatNumber(product.stock)}
+                    <td className="p-4">
+                      {product.prices.some((item) => item.size === 'ONE_SIZE') ? (
+                        <div>
+                          <p className="font-semibold">
+                            {formatNumber(product.sellableBySize?.ONE_SIZE ?? product.stock)} cái
+                          </p>
+                          <span className="text-xs text-gray-500">
+                            Thành phẩm ONE_SIZE
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {(['S', 'M', 'L'] as const).map((size) => {
+                            const quantity = product.sellableBySize?.[size];
+                            const missing = product.missingRecipeSizes?.includes(size);
+
+                            return (
+                              <div
+                                key={size}
+                                className="flex items-center justify-between gap-4"
+                              >
+                                <span className="text-gray-600">
+                                  Size {size}
+                                  <span className="ml-1 text-xs text-gray-400">
+                                    ({size === 'S' ? '350ml' : size === 'M' ? '500ml' : '650ml'})
+                                  </span>
+                                </span>
+
+                                <span className="font-semibold">
+                                  {missing || quantity === undefined
+                                    ? 'Chưa có công thức'
+                                    : `${formatNumber(quantity)} ly`}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </td>
 
                     <td className="p-4">
@@ -545,7 +851,14 @@ export default function AdminProductsPage() {
                     </td>
 
                     <td className="p-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => openRecipeModal(product)}
+                          className="rounded-lg bg-[#F1EBDF] px-3 py-2 text-xs font-medium text-[#6B5035] hover:bg-[#E9DFC9]"
+                        >
+                          Nguyên liệu
+                        </button>
+
                         <button
                           onClick={() => openEditModal(product)}
                           className="rounded-lg border border-[#D8D0C3] px-3 py-2 hover:bg-[#F8F5EF]"
@@ -641,22 +954,27 @@ export default function AdminProductsPage() {
                 />
               </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Số lượng tồn kho
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  required
-                  value={form.stock}
-                  onChange={(event) =>
-                    updateForm('stock', event.target.value)
-                  }
-                  className="w-full rounded-xl border border-[#D8D0C3] px-4 py-3 outline-none focus:border-[#1C2A24]"
-                />
-              </div>
+              {form.sizeMode === 'ONE_SIZE' && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium">
+                    Số lượng thành phẩm tồn kho *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={form.stock}
+                    onChange={(event) =>
+                      updateForm('stock', event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[#D8D0C3] px-4 py-3 outline-none focus:border-[#1C2A24]"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Nhập số lượng thành phẩm còn lại, ví dụ 89 cái Croissant.
+                  </p>
+                </div>
+              )}
 
               <div className="sm:col-span-2">
                 <label className="mb-2 block text-sm font-medium">
@@ -772,6 +1090,209 @@ export default function AdminProductsPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+            {recipeModalOpen && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center overflow-y-auto bg-black/40 p-4">
+          <div className="my-auto max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="font-serif text-2xl font-semibold">
+                  Công thức nguyên liệu
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {recipeProduct?.name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeRecipeModal}
+                disabled={recipeSaving || recipeLoading}
+                className="text-2xl text-gray-400 hover:text-gray-700"
+              >
+                ×
+              </button>
+            </div>
+
+            {recipeLoading ? (
+              <p className="py-10 text-center text-gray-500">
+                Đang tải nguyên liệu...
+              </p>
+            ) : (
+              <>
+                {recipeProduct?.prices.some(
+                  (item) => item.size === 'ONE_SIZE',
+                ) ? (
+                  <div className="mb-5 rounded-xl bg-[#F8F5EF] p-4 text-sm text-gray-600">
+                    Sản phẩm ONE_SIZE. Công thức dưới đây dùng để
+                    tham khảo; tồn kho bán hàng được tính theo số
+                    lượng thành phẩm.
+                  </div>
+                ) : (
+                  <div className="mb-5 rounded-xl bg-[#F8F5EF] p-4 text-sm text-gray-600">
+                    Nhập định lượng nguyên liệu cần dùng để chế biến
+                    một ly ở từng kích thước.
+                  </div>
+                )}
+
+                {(
+                  recipeProduct?.prices.some(
+                    (item) => item.size === 'ONE_SIZE',
+                  )
+                    ? ['ONE_SIZE']
+                    : ['S', 'M', 'L']
+                ).map((size) => {
+                  const recipeSize = size as RecipeSize;
+
+                  return (
+                    <section
+                      key={size}
+                      className="mb-6 rounded-xl border border-[#E9E3D9] p-4"
+                    >
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold">
+                            {size === 'ONE_SIZE'
+                              ? 'ONE_SIZE'
+                              : `Size ${size}`}
+                          </h3>
+                          <p className="text-xs text-gray-500">
+                            {size === 'S'
+                              ? 'Ly 350ml'
+                              : size === 'M'
+                                ? 'Ly 500ml'
+                                : size === 'L'
+                                  ? 'Ly 650ml'
+                                  : 'Một kích thước'}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => addRecipeRow(recipeSize)}
+                          className="rounded-lg border border-[#D8D0C3] px-3 py-2 text-xs hover:bg-[#F8F5EF]"
+                        >
+                          + Thêm nguyên liệu
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {recipeRows[recipeSize].map((row, index) => {
+                          const selectedIngredient = ingredients.find(
+                            (item) => item.id === row.ingredientId,
+                          );
+
+                          return (
+                            <div
+                              key={`${recipeSize}-${index}`}
+                              className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_140px_auto]"
+                            >
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-gray-600">
+                                  Nguyên liệu
+                                </label>
+
+                                <select
+                                  value={row.ingredientId}
+                                  onChange={(event) =>
+                                    updateRecipeRow(
+                                      recipeSize,
+                                      index,
+                                      'ingredientId',
+                                      event.target.value,
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-[#D8D0C3] px-3 py-2.5 text-sm"
+                                >
+                                  <option value="">
+                                    -- Chọn nguyên liệu --
+                                  </option>
+
+                                  {ingredients.map((ingredient) => (
+                                    <option
+                                      key={ingredient.id}
+                                      value={ingredient.id}
+                                    >
+                                      {ingredient.name} ({ingredient.unit})
+                                    </option>
+                                  ))}
+                                </select>
+
+                                {selectedIngredient && (
+                                  <p className="mt-1 text-xs text-gray-500">
+                                    Khả dụng:{' '}
+                                    {formatNumber(
+                                      selectedIngredient.availableStock,
+                                    )}{' '}
+                                    {selectedIngredient.unit}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-gray-600">
+                                  Định lượng
+                                </label>
+
+                                <input
+                                  type="number"
+                                  min="0.001"
+                                  step="any"
+                                  value={row.quantity}
+                                  onChange={(event) =>
+                                    updateRecipeRow(
+                                      recipeSize,
+                                      index,
+                                      'quantity',
+                                      event.target.value,
+                                    )
+                                  }
+                                  placeholder="Ví dụ: 20"
+                                  className="w-full rounded-lg border border-[#D8D0C3] px-3 py-2.5 text-sm"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeRecipeRow(recipeSize, index)
+                                }
+                                className="rounded-lg px-3 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={closeRecipeModal}
+                    disabled={recipeSaving}
+                    className="rounded-full border border-[#D8D0C3] px-5 py-2.5 text-sm"
+                  >
+                    Hủy
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={saveRecipes}
+                    disabled={recipeSaving || ingredients.length === 0}
+                    className="rounded-full bg-[#1C2A24] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#344A3E] disabled:opacity-50"
+                  >
+                    {recipeSaving ? 'Đang lưu...' : 'Lưu công thức'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </main>

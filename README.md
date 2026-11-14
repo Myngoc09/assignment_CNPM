@@ -2,6 +2,11 @@
 
 # HƯỚNG DẪN CẬP NHẬT VÀ CHẠY BREWLITE BẰNG DOCKER
 
+ê những ai chưa tạo bàng lần nào thì chạy từ bước 1 nha còn đã tạo trước đó rồi xong pull tiếp task10 này thì chạy để tải bảng promo_code
+
+cd backend
+npm.cmd run migration:run
+
 ## 1. Lấy code mới nhất
 
 Nếu đã clone project trước đó, mở Terminal tại thư mục dự án và chạy:

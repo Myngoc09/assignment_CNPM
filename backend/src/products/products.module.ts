@@ -14,10 +14,11 @@ import { AdminProductsService } from './admin-products.service';
 import { AuthModule } from '../auth/auth.module';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
-
+import { Ingredient } from '../inventory/entities/ingredient.entity';
+import { ProductRecipe } from '../inventory/entities/product-recipe.entity';
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Product, ProductSizePrice]),
+    TypeOrmModule.forFeature([Product, ProductSizePrice, Ingredient, ProductRecipe]),
     AuthModule,
   ],
   controllers: [

@@ -144,7 +144,7 @@ export default function CartPage() {
         promoCode: promoCode.trim() || undefined,
         pointsToRedeem: Number(pointsToRedeem) || 0,
         items: items.map((item: any) => ({
-          productId: String(item.productId || item.id).split('-')[0],
+          productId: String(item.productId || item.id),
           size: item.size || 'M',
           toppings: item.topping
             ? item.topping
@@ -280,7 +280,7 @@ export default function CartPage() {
                 <p className="text-sm text-gray-500">
                   Size:{' '}
                   <span className="font-medium text-gray-700">
-                    {item.size}
+                    {item.size === 'ONE_SIZE' ? '1 size' : item.size}
                   </span>
                 </p>
 

@@ -10,6 +10,10 @@ export interface Product {
   rating: number;
   price: number;
   imageUrl: string;
+  prices?: {
+    size: string;
+    price: number;
+  }[];
 }
 
 interface ProductModalProps {
@@ -43,18 +47,17 @@ export default function ProductModal({
   const [selectedSize, setSelectedSize] = useState('M');
   const [selectedToppings, setSelectedToppings] = useState<string[]>([]);
 
-  const isOneSize = product?.name
-    .toLowerCase()
-    .includes('croissant') ?? false;
+  const isOneSize =
+    product?.prices?.some((item) => item.size === 'ONE_SIZE') ?? false;
 
   // Dat lai lua chon khi mo mot san pham khac
   useEffect(() => {
     if (product) {
-      const isCroissant = product.name
-        .toLowerCase()
-        .includes('croissant');
+      const oneSize = product.prices?.some(
+        (item) => item.size === 'ONE_SIZE',
+      ) ?? false;
 
-      setSelectedSize(isCroissant ? 'ONE_SIZE' : 'M');
+      setSelectedSize(oneSize ? 'ONE_SIZE' : 'M');
       setSelectedToppings([]);
     }
   }, [product]);

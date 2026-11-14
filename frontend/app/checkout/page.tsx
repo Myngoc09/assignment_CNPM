@@ -119,7 +119,10 @@ export default function CheckoutPage() {
               return (
                 <li key={uniqueKey} className="py-2 flex justify-between">
                   <span>
-                    {item.name} (x{quantity}) {item.size ? `- Size: ${item.size}` : ''}
+                    {item.name} (x{quantity}){' '}
+                    {item.size
+                      ? `- Size: ${item.size === 'ONE_SIZE' ? '1 size' : item.size}`
+                      : ''}
                   </span>
                   <span className="font-medium">
                     {(price * quantity).toLocaleString('vi-VN')} đ
