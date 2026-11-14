@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Req,
@@ -34,11 +35,13 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   createPayment(
     @Body() dto: CreatePaymentDto,
+    @Headers('idempotency-key') idempotencyKey: string,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.paymentsService.createPayment(
       dto,
       req.user.userId,
+      idempotencyKey,
     );
   }
 

@@ -18,6 +18,12 @@ interface Order {
   id: string;
   status: string;
   total: number;
+  subtotal: number;
+  discountAmount: number;
+  promoCode: string | null;
+  pointsRedeemed: number;
+  pointsDiscountAmount: number;
+  rewardPointsEarned: number;
   createdAt: string;
   items: OrderItem[];
 }
@@ -261,6 +267,13 @@ const formatDate = (date: string) => {
                  ))}
               </div>
           </div>
+
+                <div className="border-t border-gray-100 mt-4 pt-4 space-y-2 text-sm">
+                  <div className="flex justify-between gap-3"><span className="text-gray-500">Tạm tính</span><span>{formatCurrency(order.subtotal ?? order.total)}</span></div>
+                  {order.promoCode && <div className="flex justify-between gap-3 text-green-700"><span>Mã khuyến mãi: {order.promoCode}</span><span>-{formatCurrency(order.discountAmount || 0)}</span></div>}
+                  {(order.pointsRedeemed || 0) > 0 && <div className="flex justify-between gap-3 text-green-700"><span>Điểm đã sử dụng: {order.pointsRedeemed.toLocaleString('vi-VN')} điểm</span><span>-{formatCurrency(order.pointsDiscountAmount || 0)}</span></div>}
+                  {order.status === 'PAID' || order.status === 'PREPARING' || order.status === 'READY' || order.status === 'COMPLETED' ? <div className="flex justify-between gap-3 text-amber-700"><span>Điểm nhận được sau thanh toán</span><span>+{(order.rewardPointsEarned || 0).toLocaleString('vi-VN')} điểm</span></div> : null}
+                </div>
 
                 <div className="border-t border-gray-100 mt-4 pt-4 flex flex-wrap justify-between gap-3">
                   <div>

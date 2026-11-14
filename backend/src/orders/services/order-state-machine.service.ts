@@ -1,5 +1,6 @@
+
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { OrderStatus } from '../enums/order-status.enum';
+import { OrderStatus } from '../entities/order.entity';
 
 @Injectable()
 export class OrderStateMachineService {
@@ -25,11 +26,15 @@ export class OrderStateMachineService {
 
   transition(current: OrderStatus, next: OrderStatus): OrderStatus {
     if (!Object.values(OrderStatus).includes(current)) {
-      throw new BadRequestException(`Trạng thái hiện tại không hợp lệ: ${current}`);
+      throw new BadRequestException(
+        `Trạng thái hiện tại không hợp lệ: ${current}`,
+      );
     }
 
     if (!Object.values(OrderStatus).includes(next)) {
-      throw new BadRequestException(`Trạng thái tiếp theo không hợp lệ: ${next}`);
+      throw new BadRequestException(
+        `Trạng thái tiếp theo không hợp lệ: ${next}`,
+      );
     }
 
     if (!this.transitions[current].includes(next)) {

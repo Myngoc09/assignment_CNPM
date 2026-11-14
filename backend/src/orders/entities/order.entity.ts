@@ -36,6 +36,27 @@ export class Order {
   @Column('float')
   total: number;
 
+  @Column({ type: 'integer', default: 0 })
+  subtotal: number;
+
+  @Column({ type: 'integer', default: 0 })
+  discountAmount: number;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  promoCode: string | null;
+
+  @Column({ type: 'integer', default: 0 })
+  pointsRedeemed: number;
+
+  @Column({ type: 'integer', default: 0 })
+  pointsDiscountAmount: number;
+
+  @Column({ type: 'integer', default: 0 })
+  rewardPointsEarned: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  loyaltyAwardedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

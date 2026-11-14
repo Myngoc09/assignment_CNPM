@@ -7,6 +7,7 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 import { Order } from '../../orders/entities/order.entity';
@@ -32,6 +33,7 @@ export enum PaymentStatus {
 }
 
 @Entity('payments')
+@Index(['userId', 'idempotencyKey'], { unique: true })
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -44,6 +46,13 @@ export class Payment {
 
   @Column({ type: 'integer' })
   amount: number;
+
+  // Nullable to preserve legacy Task 8 payment rows.
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  idempotencyKey: string | null;
+
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  requestHash: string | null;
 
   @Column({
     type: 'enum',

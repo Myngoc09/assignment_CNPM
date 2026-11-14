@@ -1,19 +1,30 @@
 
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+
 import { AuthModule } from '../auth/auth.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { ProductSizePrice } from '../products/entities/product-size-price.entity';
+import { Product } from '../products/entities/product.entity';
+import { PromoCode } from '../promotions/entities/promo-code.entity';
+import { PromotionsModule } from '../promotions/promotions.module';
+
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { Order } from './entities/order.entity';
 import { OrderItem } from './entities/order-item.entity';
-import { Product } from '../products/entities/product.entity';
 import { OrderStateMachineService } from './services/order-state-machine.service';
-import { ProductSizePrice } from '../products/entities/product-size-price.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order, OrderItem, Product, ProductSizePrice]),
+    TypeOrmModule.forFeature([
+      Order,
+      OrderItem,
+      Product,
+      ProductSizePrice,
+      PromoCode,
+    ]),
+    PromotionsModule,
     AuthModule,
     InventoryModule,
   ],

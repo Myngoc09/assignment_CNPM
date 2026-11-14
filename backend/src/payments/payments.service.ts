@@ -1,37 +1,38 @@
+
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
-
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { OrderStateMachineService } from '../orders/services/order-state-machine.service';
-import { IngredientInventoryService } from '../inventory/ingredient-inventory.service';
-import { OrderItem } from '../orders/entities/order-item.entity';
-
 import {
+  createHash,
   createHmac,
   randomBytes,
   timingSafeEqual,
 } from 'node:crypto';
-
 import { DataSource, Repository } from 'typeorm';
 
+import { Order, OrderStatus } from '../orders/entities/order.entity';
+import { OrderItem } from '../orders/entities/order-item.entity';
+import { OrderStateMachineService } from '../orders/services/order-state-machine.service';
+
+import { IngredientInventoryService } from '../inventory/ingredient-inventory.service';
+
+import { User } from '../users/entities/user.entity';
 import {
-  Order,
-  OrderStatus,
-} from '../orders/entities/order.entity';
+  LoyaltyTransaction,
+  LoyaltyTransactionType,
+} from '../loyalty/entities/loyalty-transaction.entity';
 
 import {
   Payment,
   PaymentProvider,
   PaymentStatus,
 } from './entities/payment.entity';
-
 import { CreatePaymentDto } from './dto/create-payment.dto';
 
 interface MockBankResponse {
@@ -45,183 +46,271 @@ interface MockBankResponse {
 
 @Injectable()
 export class PaymentsService {
-  private readonly logger = new Logger(PaymentsService.name);
-
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
-    private readonly orderStateMachine: OrderStateMachineService,
-    private readonly dataSource: DataSource,
-    private readonly ingredientInventoryService: IngredientInventoryService,
 
+    private readonly orderStateMachine: OrderStateMachineService,
+    private readonly ingredientInventoryService: IngredientInventoryService,
+    private readonly dataSource: DataSource,
     private readonly configService: ConfigService,
   ) {}
-
-  // =====================================================
-  // 1. TẠO GIAO DỊCH
-  // =====================================================
 
   async createPayment(
     dto: CreatePaymentDto,
     userId: string,
+    idempotencyKey: string,
   ) {
+    // 1. Kiểm tra Idempotency-Key.
+    if (
+      !idempotencyKey ||
+      idempotencyKey.length < 8 ||
+      idempotencyKey.length > 128
+    ) {
+      throw new BadRequestException(
+        'Header Idempotency-Key là bắt buộc (8–128 ký tự)',
+      );
+    }
+
     if (dto.provider !== PaymentProvider.MOCK) {
       throw new BadRequestException(
         'Hiện tại chỉ hỗ trợ Mock Bank',
       );
     }
 
-    // Bước 1: Tạo Payment PENDING trong database.
-    // Không gọi Mock Bank khi đang giữ transaction.
-    const pendingPayment = await this.dataSource.transaction(
-      async (manager) => {
-        const order = await manager.findOne(Order, {
-          where: {
-            id: dto.orderId,
-            userId,
-          },
-          lock: {
-            mode: 'pessimistic_write',
-          },
-        });
-
-        if (!order) {
-          throw new NotFoundException(
-            'Không tìm thấy đơn hàng của tài khoản này',
-          );
-        }
-
-        if (order.status === OrderStatus.PAID) {
-          throw new ConflictException(
-            'Đơn hàng đã được thanh toán',
-          );
-        }
-
-        if (
-          order.status !== OrderStatus.PENDING &&
-          order.status !== OrderStatus.PAYMENT_FAILED
-        ) {
-          throw new ConflictException(
-            'Đơn hàng không thể thanh toán ở trạng thái hiện tại',
-          );
-        }
-        if (order.status === OrderStatus.PAYMENT_FAILED) {
-          // Lay cac san pham trong don hang
-          const orderItems = await manager.find(OrderItem, {
-            where: {
-              orderId: order.id,
-            },
-          });
-
-          // Giu nguyen lieu lai truoc khi thanh toan lai
-          await this.ingredientInventoryService.reserveIngredients(
-            manager,
-            order.id,
-            orderItems,
-          );
-
-          order.status = this.orderStateMachine.transition(
-            order.status,
-            OrderStatus.PENDING,
-          );
-
-          await manager.save(Order, order);
-        }
-
-        if (
-          !Number.isSafeInteger(order.total) ||
-          order.total <= 0
-        ) {
-          throw new BadRequestException(
-            'Tổng tiền đơn hàng không hợp lệ',
-          );
-        }
-
-        const txnRef =
-          `${Date.now()}-${randomBytes(4).toString('hex')}`;
-
-        const payment = manager.create(Payment, {
-          orderId: order.id,
-          userId,
-          amount: order.total,
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          orderId: dto.orderId,
           method: dto.method,
-          provider: PaymentProvider.MOCK,
-          status: PaymentStatus.PENDING,
-          txnRef,
-          mockTransactionId: null,
-          vnpTransactionNo: null,
-          responseCode: null,
-          paymentUrl: null,
+          provider: dto.provider,
+        }),
+      )
+      .digest('hex');
+
+    // 2. Kiểm tra giao dịch đã tồn tại theo Idempotency-Key.
+    let payment: Payment | null =
+      await this.paymentRepository.findOne({
+        where: { userId, idempotencyKey },
+      });
+
+    if (payment) {
+      if (payment.requestHash !== requestHash) {
+        throw new ConflictException(
+          'Idempotency-Key đã được dùng cho nội dung yêu cầu khác',
+        );
+      }
+
+      if (payment.status !== PaymentStatus.PENDING) {
+        return await this.paymentResult(payment, true);
+      }
+    } else {
+      try {
+        payment = await this.dataSource.transaction(
+          async (manager) => {
+            const order = await manager.findOne(Order, {
+              where: {
+                id: dto.orderId,
+                userId,
+              },
+              lock: { mode: 'pessimistic_write' },
+            });
+
+            if (!order) {
+              throw new NotFoundException(
+                'Không tìm thấy đơn hàng của tài khoản này',
+              );
+            }
+
+            if (order.status === OrderStatus.PAID) {
+              throw new ConflictException(
+                'Đơn hàng đã được thanh toán',
+              );
+            }
+
+            if (
+              order.status !== OrderStatus.PENDING &&
+              order.status !== OrderStatus.PAYMENT_FAILED
+            ) {
+              throw new ConflictException(
+                'Đơn hàng không thể thanh toán ở trạng thái hiện tại',
+              );
+            }
+
+            // 3. Nếu thanh toán lại sau thất bại,
+            // giữ nguyên liệu lại trước khi thử thanh toán.
+            if (order.status === OrderStatus.PAYMENT_FAILED) {
+              const orderItems = await manager.find(OrderItem, {
+                where: { orderId: order.id },
+              });
+
+              await this.ingredientInventoryService.reserveIngredients(
+                manager,
+                order.id,
+                orderItems,
+              );
+
+              order.status = this.orderStateMachine.transition(
+                order.status,
+                OrderStatus.PENDING,
+              );
+
+              await manager.save(Order, order);
+            }
+
+            if (
+              !Number.isSafeInteger(order.total) ||
+              order.total <= 0
+            ) {
+              throw new BadRequestException(
+                'Tổng tiền đơn hàng không hợp lệ',
+              );
+            }
+
+            // 4. Tạo giao dịch thanh toán.
+            const row = manager.create(Payment, {
+              orderId: order.id,
+              userId,
+              amount: order.total,
+              method: dto.method,
+              provider: PaymentProvider.MOCK,
+              status: PaymentStatus.PENDING,
+              idempotencyKey,
+              requestHash,
+              txnRef: `${Date.now()}-${randomBytes(4).toString('hex')}`,
+              mockTransactionId: null,
+              vnpTransactionNo: null,
+              responseCode: null,
+              paymentUrl: null,
+            });
+
+            return manager.save(Payment, row);
+          },
+        );
+      } catch (error: any) {
+        // Hai request đồng thời có thể cùng tạo một Idempotency-Key.
+        // Nếu một request thắng, đọc lại giao dịch đã được tạo.
+        if (
+          error?.code !== '23505' &&
+          error?.code !== 'SQLITE_CONSTRAINT_UNIQUE'
+        ) {
+          throw error;
+        }
+
+        payment = await this.paymentRepository.findOne({
+          where: { userId, idempotencyKey },
         });
 
-        const savedPayment = await manager.save(
-          Payment,
-          payment,
-        );
+        if (!payment) {
+          throw error;
+        }
 
-        return {
-          paymentId: savedPayment.id,
-          orderId: savedPayment.orderId,
-          amount: savedPayment.amount,
-          method: savedPayment.method,
-          transactionRef: savedPayment.txnRef,
-        };
-      },
-    );
+        if (payment.requestHash !== requestHash) {
+          throw new ConflictException(
+            'Idempotency-Key đã được dùng cho nội dung yêu cầu khác',
+          );
+        }
 
-    // Bước 2: Gọi Mock Bank bên ngoài transaction database.
+        if (payment.status !== PaymentStatus.PENDING) {
+          return await this.paymentResult(payment, true);
+        }
+      }
+    }
+
+    if (!payment) {
+      throw new InternalServerErrorException(
+        'Không thể khởi tạo giao dịch thanh toán',
+      );
+    }
+
+    // 5. Gọi Mock Bank bên ngoài transaction database.
+    // Nếu kết quả mạng không xác định, giữ PENDING để retry an toàn.
     try {
       const bankResponse = await this.callMockBank(
-        pendingPayment.orderId,
-        pendingPayment.amount,
+        payment.orderId,
+        payment.amount,
+        idempotencyKey,
       );
 
-      // Bước 3: Xác minh kết quả Mock Bank.
       this.verifyMockBankResponse(
         bankResponse,
-        pendingPayment.orderId,
-        pendingPayment.amount,
+        payment.orderId,
+        payment.amount,
       );
 
-      // Bước 4: Cập nhật database sau khi xác minh.
-      return await this.updatePaymentResult(
-        pendingPayment.paymentId,
+      const result = await this.updatePaymentResult(
+        payment.id,
         bankResponse,
       );
-    } catch (error) {
-      // Log nguyên nhân thật để debug (xem ở terminal NestJS).
-      this.logger.error(
-        `Thanh toán ${pendingPayment.paymentId} lỗi`,
-        error instanceof Error ? error.stack : String(error),
-      );
 
-      // Nếu Mock Bank lỗi hoặc trả kết quả không hợp lệ,
-      // không được tự ý đánh dấu đơn hàng đã thanh toán.
-      await this.markPaymentFailed(
-        pendingPayment.paymentId,
-      );
+      return {
+        ...result,
+        idempotentReplay: false,
+      };
+    } catch (error) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
 
       throw new InternalServerErrorException(
-        'Không thể xác nhận thanh toán từ Mock Bank',
+        'Chưa xác định được kết quả từ Mock Bank; hãy thử lại với cùng Idempotency-Key',
       );
     }
   }
 
-  // =====================================================
-  // 2. GỌI MOCK BANK
-  // =====================================================
+  // Trả kết quả của giao dịch đã được xử lý trước đó.
+  private async paymentResult(
+    payment: Payment,
+    replay: boolean,
+  ) {
+    const order = await this.dataSource
+      .getRepository(Order)
+      .findOne({
+        where: { id: payment.orderId },
+      });
 
+    return {
+      message:
+        payment.status === PaymentStatus.PAID
+          ? 'Thanh toán đã thành công trước đó'
+          : payment.status === PaymentStatus.PAYMENT_FAILED
+            ? 'Giao dịch trước đó đã thất bại; hãy tạo yêu cầu mới với Idempotency-Key mới'
+            : 'Yêu cầu thanh toán đang được xử lý',
+
+      paymentId: payment.id,
+      orderId: payment.orderId,
+      amount: payment.amount,
+      method: payment.method,
+      status: payment.status,
+
+      orderStatus:
+        payment.status === PaymentStatus.PAID
+          ? OrderStatus.PAID
+          : undefined,
+
+      mockTransactionId: payment.mockTransactionId,
+      rewardPointsEarned: order?.rewardPointsEarned ?? 0,
+      pointsRedeemed: order?.pointsRedeemed ?? 0,
+      pointsDiscountAmount: order?.pointsDiscountAmount ?? 0,
+      idempotentReplay: replay,
+      simulated: true,
+    };
+  }
+
+  // Gửi yêu cầu thanh toán đến Mock Bank.
   private async callMockBank(
     orderId: string,
     amount: number,
+    idempotencyKey: string,
   ): Promise<MockBankResponse> {
-    const bankUrl = this.configService.get<string>(
-      'MOCK_BANK_URL',
-    );
+    const bankUrl =
+      this.configService.get<string>('MOCK_BANK_URL');
 
-    const apiKey = this.configService.get<string>(
-      'MOCK_BANK_API_KEY',
-    );
+    const apiKey =
+      this.configService.get<string>('MOCK_BANK_API_KEY');
 
     if (!bankUrl || !apiKey) {
       throw new InternalServerErrorException(
@@ -229,29 +318,31 @@ export class PaymentsService {
       );
     }
 
-    const configuredResult = this.getMockResult();
+    const configured = this.configService
+      .get<string>('MOCK_PAYMENT_RESULT', 'SUCCESS')
+      .toUpperCase();
 
-    const simulateResult =
-      configuredResult === 'FAILURE'
-        ? 'FAILED'
-        : configuredResult;
+    if (!['SUCCESS', 'FAILURE'].includes(configured)) {
+      throw new BadRequestException(
+        'MOCK_PAYMENT_RESULT chỉ nhận SUCCESS hoặc FAILURE',
+      );
+    }
 
     const response = await fetch(
       `${bankUrl.replace(/\/$/, '')}/payments/charge`,
       {
         method: 'POST',
-
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
+          'Idempotency-Key': idempotencyKey,
         },
-
         body: JSON.stringify({
           orderId,
           amount,
-          simulateResult,
+          simulateResult:
+            configured === 'FAILURE' ? 'FAILED' : 'SUCCESS',
         }),
-
         signal: AbortSignal.timeout(10000),
       },
     );
@@ -265,18 +356,14 @@ export class PaymentsService {
     return (await response.json()) as MockBankResponse;
   }
 
-  // =====================================================
-  // 3. XÁC MINH CHỮ KÝ MOCK BANK
-  // =====================================================
-
+  // Xác minh chữ ký HMAC từ Mock Bank.
   private verifyMockBankResponse(
     response: MockBankResponse,
-    expectedOrderId: string,
-    expectedAmount: number,
-  ): void {
-    const secret = this.configService.get<string>(
-      'MOCK_BANK_SECRET',
-    );
+    orderId: string,
+    amount: number,
+  ) {
+    const secret =
+      this.configService.get<string>('MOCK_BANK_SECRET');
 
     if (!secret) {
       throw new InternalServerErrorException(
@@ -286,30 +373,20 @@ export class PaymentsService {
 
     if (
       !response ||
-      response.orderId !== expectedOrderId ||
-      response.amount !== expectedAmount ||
+      response.orderId !== orderId ||
+      response.amount !== amount ||
       typeof response.transactionId !== 'string' ||
-      response.transactionId.length === 0 ||
-      typeof response.processedAt !== 'string' ||
+      !response.transactionId ||
+      !['SUCCESS', 'FAILED'].includes(response.status) ||
       Number.isNaN(Date.parse(response.processedAt)) ||
-      !['SUCCESS', 'FAILED'].includes(response.status)
+      !/^[a-fA-F0-9]{64}$/.test(response.signature ?? '')
     ) {
       throw new BadRequestException(
         'Dữ liệu trả về từ Mock Bank không hợp lệ',
       );
     }
 
-    if (
-      typeof response.signature !== 'string' ||
-      !/^[a-fA-F0-9]{64}$/.test(response.signature)
-    ) {
-      throw new BadRequestException(
-        'Chữ ký Mock Bank không hợp lệ',
-      );
-    }
-
-    // Phải giữ đúng thứ tự thuộc tính giống Mock Bank.
-    const paymentData = {
+    const data = {
       orderId: response.orderId,
       transactionId: response.transactionId,
       amount: response.amount,
@@ -317,50 +394,34 @@ export class PaymentsService {
       processedAt: response.processedAt,
     };
 
-    const calculatedSignature = createHmac(
-      'sha256',
-      secret,
-    )
-      .update(JSON.stringify(paymentData))
-      .digest('hex');
+    const expected = createHmac('sha256', secret)
+      .update(JSON.stringify(data))
+      .digest();
 
     const received = Buffer.from(
       response.signature,
       'hex',
     );
 
-    const calculated = Buffer.from(
-      calculatedSignature,
-      'hex',
-    );
-
-    const isValid =
-      received.length === calculated.length &&
-      timingSafeEqual(received, calculated);
-
-    if (!isValid) {
+    if (
+      received.length !== expected.length ||
+      !timingSafeEqual(received, expected)
+    ) {
       throw new BadRequestException(
         'Xác minh chữ ký Mock Bank thất bại',
       );
     }
   }
 
-  // =====================================================
-  // 4. CẬP NHẬT KẾT QUẢ THANH TOÁN
-  // =====================================================
-
+  // Cập nhật kết quả thanh toán và điểm thưởng trong cùng transaction.
   private async updatePaymentResult(
     paymentId: string,
-    bankResponse: MockBankResponse,
+    bank: MockBankResponse,
   ) {
     return this.dataSource.transaction(async (manager) => {
       const payment = await manager.findOne(Payment, {
-        where: {
-          id: paymentId,
-        },
-        lock: {
-          mode: 'pessimistic_write',
-        },
+        where: { id: paymentId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!payment) {
@@ -371,22 +432,12 @@ export class PaymentsService {
 
       // Chống xử lý lại giao dịch đã hoàn tất.
       if (payment.status !== PaymentStatus.PENDING) {
-        return {
-          paymentId: payment.id,
-          orderId: payment.orderId,
-          status: payment.status,
-          mockTransactionId: payment.mockTransactionId,
-          message: 'Giao dịch đã được xử lý trước đó',
-        };
+        return await this.paymentResult(payment, true);
       }
 
       const order = await manager.findOne(Order, {
-        where: {
-          id: payment.orderId,
-        },
-        lock: {
-          mode: 'pessimistic_write',
-        },
+        where: { id: payment.orderId },
+        lock: { mode: 'pessimistic_write' },
       });
 
       if (!order) {
@@ -395,22 +446,20 @@ export class PaymentsService {
         );
       }
 
-      const isSuccess =
-        bankResponse.status === 'SUCCESS';
+      const isSuccess = bank.status === 'SUCCESS';
 
       payment.status = isSuccess
         ? PaymentStatus.PAID
         : PaymentStatus.PAYMENT_FAILED;
 
-      payment.mockTransactionId =
-        bankResponse.transactionId;
+      payment.mockTransactionId = bank.transactionId;
 
       payment.responseCode = isSuccess
         ? 'MOCK_SUCCESS'
         : 'MOCK_FAILURE';
 
       if (isSuccess) {
-        // Thanh toan thanh cong: tru nguyen lieu kho thuc te
+        // 1. Thanh toán thành công: tiêu thụ nguyên liệu đã giữ.
         await this.ingredientInventoryService.consumeIngredients(
           manager,
           order.id,
@@ -420,8 +469,76 @@ export class PaymentsService {
           order.status,
           OrderStatus.PAID,
         );
+
+        // 2. Xử lý điểm thưởng.
+        const user = await manager.findOne(User, {
+          where: { id: order.userId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!user) {
+          throw new NotFoundException(
+            'Không tìm thấy tài khoản của đơn hàng',
+          );
+        }
+
+        // Chỉ xử lý điểm một lần cho mỗi đơn hàng.
+        if (!order.loyaltyAwardedAt) {
+          const pointsToSpend = order.pointsRedeemed ?? 0;
+
+          if (
+            (user.loyaltyPoints ?? 0) < pointsToSpend
+          ) {
+            throw new ConflictException(
+              'Số dư điểm thưởng không đủ để hoàn tất đơn hàng này',
+            );
+          }
+
+          // Trừ điểm đã sử dụng.
+          if (pointsToSpend > 0) {
+            user.loyaltyPoints =
+              (user.loyaltyPoints ?? 0) - pointsToSpend;
+
+            await manager.save(
+              LoyaltyTransaction,
+              manager.create(LoyaltyTransaction, {
+                userId: user.id,
+                orderId: order.id,
+                points: pointsToSpend,
+                type: LoyaltyTransactionType.REDEEM,
+                description: `Sử dụng điểm cho đơn hàng ${order.id}`,
+              }),
+            );
+          }
+
+          // Cộng 5% điểm trên số tiền thực tế đã thanh toán.
+          const earnedPoints = Math.floor(
+            payment.amount * 0.05,
+          );
+
+          if (earnedPoints > 0) {
+            user.loyaltyPoints =
+              (user.loyaltyPoints ?? 0) + earnedPoints;
+
+            await manager.save(
+              LoyaltyTransaction,
+              manager.create(LoyaltyTransaction, {
+                userId: user.id,
+                orderId: order.id,
+                points: earnedPoints,
+                type: LoyaltyTransactionType.EARN,
+                description: `Tích 5% điểm từ số tiền thanh toán đơn hàng ${order.id}`,
+              }),
+            );
+          }
+
+          await manager.save(User, user);
+
+          order.rewardPointsEarned = earnedPoints;
+          order.loyaltyAwardedAt = new Date();
+        }
       } else {
-        // Thanh toan that bai: giai phong nguyen lieu da giu
+        // Thanh toán thất bại: giải phóng nguyên liệu đã giữ.
         await this.ingredientInventoryService.releaseIngredients(
           manager,
           order.id,
@@ -455,83 +572,20 @@ export class PaymentsService {
         status: savedPayment.status,
         orderStatus: order.status,
         transactionRef: savedPayment.txnRef,
-        mockTransactionId:
-          savedPayment.mockTransactionId,
+        mockTransactionId: savedPayment.mockTransactionId,
         responseCode: savedPayment.responseCode,
+        rewardPointsEarned: order.rewardPointsEarned,
+        pointsRedeemed: order.pointsRedeemed,
+        pointsDiscountAmount: order.pointsDiscountAmount,
         simulated: true,
       };
     });
   }
 
-  // =====================================================
-  // 5. ĐÁNH DẤU THANH TOÁN THẤT BẠI KHI CÓ LỖI
-  // =====================================================
-
-  private async markPaymentFailed(
-    paymentId: string,
-  ): Promise<void> {
-    await this.dataSource.transaction(async (manager) => {
-      const payment = await manager.findOne(Payment, {
-        where: {
-          id: paymentId,
-        },
-        lock: {
-          mode: 'pessimistic_write',
-        },
-      });
-
-      if (
-        !payment ||
-        payment.status !== PaymentStatus.PENDING
-      ) {
-        return;
-      }
-
-      const order = await manager.findOne(Order, {
-        where: {
-          id: payment.orderId,
-        },
-        lock: {
-          mode: 'pessimistic_write',
-        },
-      });
-
-      payment.status = PaymentStatus.PAYMENT_FAILED;
-      payment.responseCode = 'MOCK_BANK_ERROR';
-
-      // Giai phong nguyen lieu khi giao dich gap loi
-      if (order) {
-        await this.ingredientInventoryService.releaseIngredients(
-          manager,
-          order.id,
-        );
-      }
-
-      await manager.save(Payment, payment);
-
-      if (order && order.status === OrderStatus.PENDING) {
-        order.status = this.orderStateMachine.transition(
-          order.status,
-          OrderStatus.PAYMENT_FAILED,
-        );
-        await manager.save(Order, order);
-      }
-    });
-  }
-
-  // =====================================================
-  // 6. XEM CHI TIẾT GIAO DỊCH
-  // =====================================================
-
-  async getPayment(
-    paymentId: string,
-    userId: string,
-  ) {
+  // Lấy thông tin một giao dịch theo tài khoản hiện tại.
+  async getPayment(paymentId: string, userId: string) {
     const payment = await this.paymentRepository.findOne({
-      where: {
-        id: paymentId,
-        userId,
-      },
+      where: { id: paymentId, userId },
     });
 
     if (!payment) {
@@ -554,23 +608,5 @@ export class PaymentsService {
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,
     };
-  }
-
-  // =====================================================
-  // 7. LẤY KẾT QUẢ MÔ PHỎNG TỪ FILE .ENV
-  // =====================================================
-
-  private getMockResult(): 'SUCCESS' | 'FAILURE' {
-    const result = this.configService
-      .get<string>('MOCK_PAYMENT_RESULT', 'SUCCESS')
-      .toUpperCase();
-
-    if (result === 'SUCCESS' || result === 'FAILURE') {
-      return result;
-    }
-
-    throw new BadRequestException(
-      'MOCK_PAYMENT_RESULT chỉ nhận SUCCESS hoặc FAILURE',
-    );
   }
 }

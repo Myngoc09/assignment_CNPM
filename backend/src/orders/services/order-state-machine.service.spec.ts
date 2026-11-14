@@ -1,6 +1,7 @@
+
 import { BadRequestException } from '@nestjs/common';
 import { OrderStateMachineService } from './order-state-machine.service';
-import { OrderStatus } from '../enums/order-status.enum';
+import { OrderStatus } from '../entities/order.entity';
 
 describe('OrderStateMachineService', () => {
   let service: OrderStateMachineService;

@@ -51,6 +51,9 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   resetPasswordExpires: Date | null;
 
+  @Column({ type: 'integer', default: 0 })
+  loyaltyPoints: number;
+
   @CreateDateColumn()
   createdAt: Date;
 }

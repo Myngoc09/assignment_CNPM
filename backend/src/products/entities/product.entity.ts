@@ -27,7 +27,7 @@ export class Product {
   price: number;
 
   @Column({ type: 'varchar', nullable: true })
-  imageUrl: string| null;
+  imageUrl: string | null;
 
   @Column({ default: 100 })
   stock: number;

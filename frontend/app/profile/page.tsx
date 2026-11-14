@@ -36,6 +36,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [availableLoyaltyPoints, setAvailableLoyaltyPoints] = useState(0);
+  const [loyaltyTransactions, setLoyaltyTransactions] = useState<Array<{ id: string; points: number; type: 'EARN' | 'REDEEM'; description: string; createdAt: string }>>([]);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
   const [editing, setEditing] = useState(false);
@@ -95,6 +98,24 @@ export default function ProfilePage() {
       .finally(() => {
         setCheckingProfile(false);
       });
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch('http://localhost:3001/loyalty/me', { headers }).then((r) => r.ok ? r.json() : Promise.reject()),
+      fetch('http://localhost:3001/loyalty/me/transactions', { headers }).then((r) => r.ok ? r.json() : Promise.reject()),
+    ]).then(([summary, transactions]) => {
+      setLoyaltyPoints(Number(summary.points ?? 0));
+      setAvailableLoyaltyPoints(Number(summary.availablePoints ?? summary.points ?? 0));
+      setLoyaltyTransactions(Array.isArray(transactions) ? transactions : []);
+    }).catch(() => {
+      setLoyaltyPoints(0);
+      setAvailableLoyaltyPoints(0);
+      setLoyaltyTransactions([]);
+    });
   }, []);
 
   const fillEditForm = (data: Profile) => {
@@ -426,6 +447,40 @@ export default function ProfilePage() {
                 {message}
               </p>
             )}
+
+            <section className="rounded-3xl border border-[#EAE8DF] bg-white p-5 shadow-sm sm:p-7">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold">Điểm thưởng BrewLite</h2>
+                  <p className="mt-1 text-sm text-[#777D75]">1 điểm tương đương 1₫ giảm giá · Tích 5% số tiền thực thanh toán</p>
+                  <p className="mt-1 text-xs text-[#858980]">Có thể sử dụng ngay: {availableLoyaltyPoints.toLocaleString('vi-VN')} điểm</p>
+                </div>
+                <div className="rounded-2xl bg-[#F5F8F2] px-5 py-3 text-right">
+                  <p className="text-xs text-[#777D75]">Số dư hiện tại</p>
+                  <p className="text-2xl font-bold text-[#354F3B]">{loyaltyPoints.toLocaleString('vi-VN')} điểm</p>
+                </div>
+              </div>
+              <div className="mt-5 border-t border-[#F0EFE9] pt-4">
+                <h3 className="font-semibold">Lịch sử điểm thưởng</h3>
+                {loyaltyTransactions.length === 0 ? (
+                  <p className="mt-3 text-sm text-[#777D75]">Chưa có giao dịch điểm thưởng.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {loyaltyTransactions.map((transaction) => (
+                      <div key={transaction.id} className="flex flex-wrap justify-between gap-2 rounded-xl bg-[#FAFAF7] p-3 text-sm">
+                        <div>
+                          <p className="font-medium">{transaction.description}</p>
+                          <p className="mt-1 text-xs text-[#858980]">{new Date(transaction.createdAt).toLocaleString('vi-VN')}</p>
+                        </div>
+                        <span className={`font-semibold ${transaction.type === 'EARN' ? 'text-green-700' : 'text-red-600'}`}>
+                          {transaction.type === 'EARN' ? '+' : '-'}{Number(transaction.points).toLocaleString('vi-VN')} điểm
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
 
             <section className="rounded-3xl border border-[#EAE8DF] bg-white p-5 shadow-sm sm:p-7">
               <div className="flex flex-wrap items-start justify-between gap-3">
