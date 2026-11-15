@@ -31,6 +31,10 @@ import {
 } from './entities/payment.entity';
 
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { VnpayCreateContext, VnpayService } from './vnpay.service';
+
+// Idempotency-Key: 8–100 ký tự chữ, số, '-', '_', ':', '.'
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9\-_:.]{8,100}$/;
 
 interface MockBankResponse {
   orderId: string;
@@ -50,6 +54,8 @@ export class PaymentsService {
     private readonly dataSource: DataSource,
 
     private readonly configService: ConfigService,
+
+    private readonly vnpayService: VnpayService,
   ) {}
 
   // =====================================================
@@ -59,10 +65,30 @@ export class PaymentsService {
   async createPayment(
     dto: CreatePaymentDto,
     userId: string,
+    ctx: Partial<VnpayCreateContext> = {},
   ) {
+    if (
+      ctx.idempotencyKey !== undefined &&
+      !IDEMPOTENCY_KEY_PATTERN.test(ctx.idempotencyKey)
+    ) {
+      throw new BadRequestException(
+        'Idempotency-Key không hợp lệ (8–100 ký tự: chữ, số, - _ : .)',
+      );
+    }
+
+    // VNPay Sandbox: bất đồng bộ, trả paymentUrl + mã QR.
+    if (dto.provider === PaymentProvider.VNPAY) {
+      return this.vnpayService.createPayment(dto, userId, {
+        ipAddr: ctx.ipAddr ?? '127.0.0.1',
+        idempotencyKey: ctx.idempotencyKey,
+      });
+    }
+
+    // Mock Bank: đồng bộ, có kết quả ngay.
+    // (Idempotency-Key cho Mock Bank sẽ làm ở Task 10.)
     if (dto.provider !== PaymentProvider.MOCK) {
       throw new BadRequestException(
-        'Hiện tại chỉ hỗ trợ Mock Bank',
+        'Provider không được hỗ trợ',
       );
     }
 
@@ -474,6 +500,12 @@ export class PaymentsService {
       throw new NotFoundException(
         'Không tìm thấy giao dịch',
       );
+    }
+
+    // VNPay: kèm paymentUrl + qrCode khi còn chờ thanh toán
+    // (frontend polling endpoint này để biết khi nào đã thanh toán xong).
+    if (payment.provider === PaymentProvider.VNPAY) {
+      return this.vnpayService.toView(payment);
     }
 
     return {

@@ -1,6 +1,7 @@
 
 'use client';
 
+import { API_URL } from '@/lib/api';    
 import type { CartItem } from '@/store/useCartStore';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -66,7 +67,7 @@ export default function ProfilePage() {
       return;
     }
 
-    fetch('http://localhost:3001/auth/profile', {
+    fetch(`${API_URL}/auth/profile`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -246,7 +247,7 @@ export default function ProfilePage() {
           : { fullName, email, phone, password };
 
       const response = await fetch(
-        `http://localhost:3001/auth/${endpoint}`,
+        `${API_URL}/auth/${endpoint}`,
         {
           method: 'POST',
           headers: {

@@ -1,4 +1,6 @@
 "use client";
+
+import { API_URL } from '@/lib/api';
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -6,7 +8,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 const LOGIN_PATH = "/";
 
 // Nên đưa vào .env.local: NEXT_PUBLIC_API_URL=http://192.168.1.224:3001
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://192.168.1.224:3001";
 
 function ResetPasswordForm() {
   const router = useRouter();

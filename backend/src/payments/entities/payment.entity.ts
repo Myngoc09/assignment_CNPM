@@ -3,6 +3,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
@@ -17,11 +18,11 @@ export enum PaymentMethod {
 }
 
 export enum PaymentProvider {
+  // Mock Bank nội bộ: thanh toán đồng bộ, có kết quả ngay.
   MOCK = 'MOCK',
 
-  // Giữ giá trị cũ để tránh thay đổi enum PostgreSQL
-  // trong quá trình đồng bộ database.
-  // Không còn sử dụng VNPay trong luồng thanh toán.
+  // VNPay Sandbox: thanh toán bất đồng bộ (trả paymentUrl + mã QR,
+  // kết quả về qua IPN / Return URL).
   VNPAY = 'VNPAY',
 }
 
@@ -32,6 +33,8 @@ export enum PaymentStatus {
 }
 
 @Entity('payments')
+// Idempotency-Key là duy nhất trong phạm vi từng user (NULL được phép lặp).
+@Index(['userId', 'idempotencyKey'], { unique: true })
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -69,6 +72,15 @@ export class Payment {
   @Column({ unique: true })
   txnRef: string;
 
+  // Giá trị header Idempotency-Key client gửi kèm (nếu có).
+  // Cùng key + cùng user => trả lại giao dịch cũ, không tạo giao dịch mới.
+  @Column({
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  idempotencyKey: string | null;
+
   // Mã giao dịch do Mock Bank trả về.
   @Column({
     type: 'varchar',
@@ -76,20 +88,23 @@ export class Payment {
   })
   mockTransactionId: string | null;
 
-  // Các cột cũ được giữ lại để tránh thay đổi schema đột ngột.
-  // Không sử dụng trong luồng Mock Bank.
+  // --- Các cột dành cho VNPay (NULL với giao dịch MOCK) ---
+
+  // vnp_TransactionNo: mã giao dịch phía VNPay.
   @Column({
     type: 'varchar',
     nullable: true,
   })
   vnpTransactionNo: string | null;
 
+  // vnp_ResponseCode: '00' = thành công.
   @Column({
     type: 'varchar',
     nullable: true,
   })
   responseCode: string | null;
 
+  // URL thanh toán đã ký; cũng là nội dung của mã QR.
   @Column({
     type: 'text',
     nullable: true,

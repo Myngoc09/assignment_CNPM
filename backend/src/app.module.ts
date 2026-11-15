@@ -65,6 +65,7 @@ import { OrdersModule } from './orders/orders.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { PaymentsModule } from './payments/payments.module';
+import { buildTypeOrmOptions } from './config/runtime-config';
 
 @Module({
   imports: [
@@ -75,12 +76,9 @@ import { PaymentsModule } from './payments/payments.module';
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres' as const,
-        url: configService.get<string>('DATABASE_URL'),
-        autoLoadEntities: true,
-        synchronize: true,
-      }),
+      // DB_SYNCHRONIZE và DB_SSL: xem src/config/runtime-config.ts
+      useFactory: (configService: ConfigService) =>
+        buildTypeOrmOptions(configService),
     }),
 
     ProductsModule,

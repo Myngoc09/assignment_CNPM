@@ -60,3 +60,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # TypeScript build information
 *.tsbuildinfo
+# VNPay smoke test
+vnpay-smoke-qr.png

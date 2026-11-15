@@ -18,7 +18,8 @@
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
     "test:cov": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --coverage",
     "test:debug": "node --inspect-brk --experimental-vm-modules -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json"
+    "test:e2e": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --config ./test/jest-e2e.json",
+    "vnpay:smoke": "nest build && node scripts/vnpay-smoke.js"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -36,6 +37,7 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^1.1.2"
@@ -51,6 +53,7 @@
     "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.2",
     "@types/passport-jwt": "^4.0.1",
+    "@types/qrcode": "^1.5.6",
     "@types/supertest": "^7.0.0",
     "jest": "^30.0.0",
     "oxlint": "^1.58.0",
