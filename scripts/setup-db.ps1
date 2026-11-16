@@ -91,7 +91,7 @@ if ($ExistsText -ne "1") {
     $PreviousUrl = $env:DATABASE_URL
 
     try {
-        $env:DATABASE_URL = "postgresql://brewlite:brewlite123@localhost:5432/$DatabaseName"
+        $env:DATABASE_URL = "postgresql://brewlite:brewlite123@127.0.0.1:5433/$DatabaseName"
 
         Push-Location (Join-Path $Root "backend")
 

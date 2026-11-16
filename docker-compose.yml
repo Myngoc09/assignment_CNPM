@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: brewlite
       POSTGRES_PASSWORD: brewlite123
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres18_data:/var/lib/postgresql
     healthcheck:
