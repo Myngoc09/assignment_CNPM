@@ -17,8 +17,8 @@ export class CreatePaymentDto {
   })
   method: PaymentMethod;
 
-  @IsIn([PaymentProvider.MOCK], {
-    message: 'Hiện tại chỉ hỗ trợ thanh toán qua MOCK BANK',
+  @IsIn([PaymentProvider.MOCK, PaymentProvider.VNPAY], {
+    message: 'provider phải là MOCK hoặc VNPAY',
   })
-  provider: PaymentProvider.MOCK;
+  provider: PaymentProvider.MOCK | PaymentProvider.VNPAY;
 }

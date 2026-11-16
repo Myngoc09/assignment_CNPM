@@ -1,12 +1,15 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { buildCorsOptions } from './config/runtime-config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 1. Bật CORS để Frontend Next.js (thường chạy port 3000) gọi được sang Backend NestJS
-  app.enableCors();
+  // 1. Bật CORS để Frontend Next.js (localhost hoặc Vercel) gọi được sang Backend NestJS.
+  // CORS_ORIGINS (cách nhau bằng dấu phẩy) giới hạn origin được phép;
+  // không đặt thì cho phép tất cả như trước.
+  app.enableCors(buildCorsOptions(process.env.CORS_ORIGINS));
 
   // 2. Kích hoạt ValidationPipe toàn cục (CỰC KỲ QUAN TRỌNG CHO TASK 6)
   app.useGlobalPipes(

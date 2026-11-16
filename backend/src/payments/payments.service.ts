@@ -1,10 +1,11 @@
+
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 
 import { ConfigService } from '@nestjs/config';
@@ -25,11 +26,16 @@ import {
 
 import {
   Payment,
+  PaymentMethod,
   PaymentProvider,
   PaymentStatus,
 } from './entities/payment.entity';
 
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { VnpayCreateContext, VnpayService } from './vnpay.service';
+
+// Idempotency-Key: 8–100 ký tự chữ, số, '-', '_', ':', '.'
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9\-_:.]{8,100}$/;
 
 interface MockBankResponse {
   orderId: string;
@@ -42,8 +48,6 @@ interface MockBankResponse {
 
 @Injectable()
 export class PaymentsService {
-  private readonly logger = new Logger(PaymentsService.name);
-
   constructor(
     @InjectRepository(Payment)
     private readonly paymentRepository: Repository<Payment>,
@@ -51,6 +55,8 @@ export class PaymentsService {
     private readonly dataSource: DataSource,
 
     private readonly configService: ConfigService,
+
+    private readonly vnpayService: VnpayService,
   ) {}
 
   // =====================================================
@@ -60,10 +66,30 @@ export class PaymentsService {
   async createPayment(
     dto: CreatePaymentDto,
     userId: string,
+    ctx: Partial<VnpayCreateContext> = {},
   ) {
+    if (
+      ctx.idempotencyKey !== undefined &&
+      !IDEMPOTENCY_KEY_PATTERN.test(ctx.idempotencyKey)
+    ) {
+      throw new BadRequestException(
+        'Idempotency-Key không hợp lệ (8–100 ký tự: chữ, số, - _ : .)',
+      );
+    }
+
+    // VNPay Sandbox: bất đồng bộ, trả paymentUrl + mã QR.
+    if (dto.provider === PaymentProvider.VNPAY) {
+      return this.vnpayService.createPayment(dto, userId, {
+        ipAddr: ctx.ipAddr ?? '127.0.0.1',
+        idempotencyKey: ctx.idempotencyKey,
+      });
+    }
+
+    // Mock Bank: INTERACTIVE (trang xác nhận, bất đồng bộ) hoặc AUTO (có kết quả ngay).
+    // (Idempotency-Key cho Mock Bank sẽ làm ở Task 10.)
     if (dto.provider !== PaymentProvider.MOCK) {
       throw new BadRequestException(
-        'Hiện tại chỉ hỗ trợ Mock Bank',
+        'Provider không được hỗ trợ',
       );
     }
 
@@ -143,6 +169,13 @@ export class PaymentsService {
       },
     );
 
+    // Chế độ tương tác (mặc định): chuyển người dùng sang trang Mock Bank,
+    // kết quả về sau qua callback (giống VNPay).
+    if (this.getMockMode() === 'INTERACTIVE') {
+      return this.startInteractiveMockPayment(pendingPayment);
+    }
+
+    // Chế độ AUTO: Mock Bank trả kết quả ngay (MOCK_PAYMENT_RESULT).
     // Bước 2: Gọi Mock Bank bên ngoài transaction database.
     try {
       const bankResponse = await this.callMockBank(
@@ -163,12 +196,6 @@ export class PaymentsService {
         bankResponse,
       );
     } catch (error) {
-      // Log nguyên nhân thật để debug (xem ở terminal NestJS).
-      this.logger.error(
-        `Thanh toán ${pendingPayment.paymentId} lỗi`,
-        error instanceof Error ? error.stack : String(error),
-      );
-
       // Nếu Mock Bank lỗi hoặc trả kết quả không hợp lệ,
       // không được tự ý đánh dấu đơn hàng đã thanh toán.
       await this.markPaymentFailed(
@@ -179,6 +206,152 @@ export class PaymentsService {
         'Không thể xác nhận thanh toán từ Mock Bank',
       );
     }
+  }
+
+  // =====================================================
+  // 1b. MOCK BANK TƯƠNG TÁC (CÓ TRANG XÁC NHẬN)
+  // =====================================================
+
+  // Nhờ Mock Bank mở phiên thanh toán, trả về paymentUrl để frontend chuyển trang.
+  private async startInteractiveMockPayment(pending: {
+    paymentId: string;
+    orderId: string;
+    amount: number;
+    method: PaymentMethod;
+    transactionRef: string;
+  }) {
+    try {
+      const bankUrl = this.requireConfig('MOCK_BANK_URL').replace(/\/$/, '');
+      const apiKey = this.requireConfig('MOCK_BANK_API_KEY');
+
+      const publicBase = (
+        this.configService.get<string>('MOCK_BANK_PUBLIC_URL') ?? bankUrl
+      ).replace(/\/$/, '');
+
+      const backendBase = (
+        this.configService.get<string>('BACKEND_PUBLIC_URL') ??
+        `http://localhost:${this.configService.get<string>('PORT') ?? '3001'}`
+      ).replace(/\/$/, '');
+
+      const returnUrl = new URL(this.getResultRedirectUrl());
+      returnUrl.searchParams.set('orderId', pending.orderId);
+      returnUrl.searchParams.set('paymentId', pending.paymentId);
+
+      const response = await fetch(`${bankUrl}/payments/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          orderId: pending.orderId,
+          amount: pending.amount,
+          callbackUrl: `${backendBase}/payments/mock/callback/${pending.paymentId}`,
+          returnUrl: returnUrl.toString(),
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Mock Bank trả về HTTP ${response.status}`);
+      }
+
+      const session = (await response.json()) as {
+        sessionId?: string;
+        expiresAt?: string;
+      };
+
+      if (!session.sessionId) {
+        throw new Error('Mock Bank không trả về sessionId');
+      }
+
+      const paymentUrl = `${publicBase}/pay/${session.sessionId}`;
+
+      await this.paymentRepository.update(pending.paymentId, {
+        paymentUrl,
+      });
+
+      return {
+        message: 'Chuyển sang Mock Bank để xác nhận thanh toán',
+        paymentId: pending.paymentId,
+        orderId: pending.orderId,
+        amount: pending.amount,
+        method: pending.method,
+        provider: PaymentProvider.MOCK,
+        status: PaymentStatus.PENDING,
+        transactionRef: pending.transactionRef,
+        paymentUrl,
+        expiresAt: session.expiresAt,
+        simulated: true,
+      };
+    } catch {
+      await this.markPaymentFailed(pending.paymentId);
+
+      throw new InternalServerErrorException(
+        'Không thể tạo phiên thanh toán Mock Bank',
+      );
+    }
+  }
+
+  // Mock Bank gọi về sau khi người dùng bấm nút.
+  // Xác thực bằng API Key + chữ ký HMAC; số tiền/đơn hàng lấy từ DB, không tin payload.
+  async handleMockCallback(
+    paymentId: string,
+    apiKey: string | undefined,
+    body: MockBankResponse,
+  ) {
+    const expectedKey =
+      this.configService.get<string>('MOCK_BANK_API_KEY');
+
+    const keyOk =
+      !!expectedKey &&
+      typeof apiKey === 'string' &&
+      Buffer.byteLength(apiKey) === Buffer.byteLength(expectedKey) &&
+      timingSafeEqual(Buffer.from(apiKey), Buffer.from(expectedKey));
+
+    if (!keyOk) {
+      throw new UnauthorizedException('API Key không hợp lệ');
+    }
+
+    const payment = await this.paymentRepository.findOne({
+      where: { id: paymentId },
+    });
+
+    if (!payment || payment.provider !== PaymentProvider.MOCK) {
+      throw new NotFoundException('Không tìm thấy giao dịch');
+    }
+
+    this.verifyMockBankResponse(body, payment.orderId, payment.amount);
+
+    return this.updatePaymentResult(payment.id, body);
+  }
+
+  private getMockMode(): 'INTERACTIVE' | 'AUTO' {
+    const mode = (
+      this.configService.get<string>('MOCK_BANK_MODE') ?? 'INTERACTIVE'
+    ).toUpperCase();
+
+    return mode === 'AUTO' ? 'AUTO' : 'INTERACTIVE';
+  }
+
+  private getResultRedirectUrl(): string {
+    const explicit = this.configService.get<string>(
+      'VNPAY_RESULT_REDIRECT_URL',
+    );
+    if (explicit) return explicit;
+
+    const frontend =
+      this.configService.get<string>('FRONTEND_URL') ??
+      'http://localhost:3000';
+    return `${frontend.replace(/\/$/, '')}/payment/result`;
+  }
+
+  private requireConfig(key: string): string {
+    const value = this.configService.get<string>(key);
+    if (!value) {
+      throw new InternalServerErrorException(`Chưa cấu hình ${key}`);
+    }
+    return value;
   }
 
   // =====================================================
@@ -236,7 +409,7 @@ export class PaymentsService {
       );
     }
 
-    return (await response.json()) as MockBankResponse;
+    return await response.json() as MockBankResponse;
   }
 
   // =====================================================
@@ -483,6 +656,12 @@ export class PaymentsService {
       );
     }
 
+    // VNPay: kèm paymentUrl + qrCode khi còn chờ thanh toán
+    // (frontend polling endpoint này để biết khi nào đã thanh toán xong).
+    if (payment.provider === PaymentProvider.VNPAY) {
+      return this.vnpayService.toView(payment);
+    }
+
     return {
       paymentId: payment.id,
       orderId: payment.orderId,
@@ -493,6 +672,10 @@ export class PaymentsService {
       transactionRef: payment.txnRef,
       mockTransactionId: payment.mockTransactionId,
       responseCode: payment.responseCode,
+      paymentUrl:
+        payment.status === PaymentStatus.PENDING
+          ? payment.paymentUrl
+          : null,
       simulated: true,
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,

@@ -8,6 +8,7 @@ import { Payment } from './entities/payment.entity';
 
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
+import { VnpayService } from './vnpay.service';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { PaymentsService } from './payments.service';
     AuthModule,
   ],
   controllers: [PaymentsController],
-  providers: [PaymentsService],
-  exports: [PaymentsService],
+  providers: [PaymentsService, VnpayService],
+  exports: [PaymentsService, VnpayService],
 })
 export class PaymentsModule {}

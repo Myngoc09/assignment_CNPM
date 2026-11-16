@@ -1,5 +1,6 @@
 'use client';
 
+import { API_URL } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -28,7 +29,7 @@ export default function HomePage() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch('http://localhost:3001/products');
+        const res = await fetch(`${API_URL}/products`);
         if (!res.ok) throw new Error('Không thể tải dữ liệu thực đơn từ server');
         const data: Product[] = await res.json();
         setProducts(data);
@@ -78,7 +79,7 @@ export default function HomePage() {
 
     try {
       // Lay thong tin tai khoan hien tai
-      const response = await fetch('http://localhost:3001/auth/profile', {
+      const response = await fetch(`${API_URL}/auth/profile`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
