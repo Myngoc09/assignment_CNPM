@@ -29,7 +29,7 @@ services:
     environment:
       # Ghi đè 2 biến này: trong Docker không dùng "localhost" nữa
       DATABASE_URL: postgresql://brewlite:brewlite123@postgres:5432/brewlite
-      MOCK_BANK_URL: http://host.docker.internal:3002
+      MOCK_BANK_URL: http://host.docker.internal:3004
     # Cho container gọi được ra máy thật (cần trên Linux, Docker Desktop đã có sẵn)
     extra_hosts:
       - "host.docker.internal:host-gateway"

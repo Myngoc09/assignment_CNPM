@@ -274,7 +274,7 @@ MAIL_APP_PASSWORD=your_email_app_password
 
 FRONTEND_URL=http://localhost:3000
 
-MOCK_BANK_URL=http://localhost:3002
+MOCK_BANK_URL=http://localhost:3004
 MOCK_BANK_API_KEY=your_mock_bank_api_key
 MOCK_BANK_SECRET=your_mock_bank_secret
 MOCK_PAYMENT_RESULT=SUCCESS
