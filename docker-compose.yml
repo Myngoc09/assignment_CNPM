@@ -19,7 +19,7 @@ services:
       retries: 10
 
   # ---------- 2. BACKEND (NestJS) ----------
-  # Lưu ý: mock-bank KHÔNG chạy trong Docker, chạy riêng trên máy (cổng 3002)
+  # Lưu ý: mock-bank KHÔNG chạy trong Docker, chạy riêng trên máy (cổng 3004)
   backend:
     build: ./backend
     container_name: brewlite-backend

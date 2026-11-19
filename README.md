@@ -242,7 +242,7 @@ BrewLite/
 │
 ├── mock-bank/                          # Dịch vụ thanh toán mô phỏng
 │   ├── src/
-│   │   ├── main.ts                     # Khởi động dịch vụ ở cổng 3002
+│   │   ├── main.ts                     # Khởi động dịch vụ ở cổng 3004
 │   │   ├── app.module.ts
 │   │   └── payments/                   # Xử lý giao dịch mô phỏng
 │   ├── Dockerfile
@@ -344,12 +344,12 @@ Không sử dụng `docker compose down -v` nếu muốn giữ dữ liệu datab
 
 ## 6. Mock Bank
 
-Mock Bank không chạy trong Docker Compose mà chạy riêng trên máy tính tại cổng 3002.
+Mock Bank không chạy trong Docker Compose mà chạy riêng trên máy tính tại cổng 3004.
 
 Backend trong Docker kết nối tới Mock Bank thông qua:
 
 ```text
-http://host.docker.internal:3002
+http://host.docker.internal:3004
 ```
 
 Cần khởi động Mock Bank trước khi thực hiện chức năng thanh toán.
@@ -474,7 +474,7 @@ npm install
 npm run start:dev
 ```
 
-Mock Bank cần lắng nghe ở `http://localhost:3002`. Giá trị `MOCK_BANK_API_KEY` trong backend và Mock Bank phải khớp nhau. Backend cần có `MOCK_BANK_URL` trỏ tới Mock Bank; khi backend chạy trong Docker Compose, cấu hình mẫu là `http://host.docker.internal:3002`.
+Mock Bank cần lắng nghe ở `http://localhost:3004`. Giá trị `MOCK_BANK_API_KEY` trong backend và Mock Bank phải khớp nhau. Backend cần có `MOCK_BANK_URL` trỏ tới Mock Bank; khi backend chạy trong Docker Compose, cấu hình mẫu là `http://host.docker.internal:3004`.
 
 ## 3. Tạo đơn hàng
 
