@@ -194,23 +194,66 @@ BrewLite là ứng dụng đặt đồ uống trực tuyến, gồm giao diện 
 
 ```text
 BrewLite/
-├── backend/
+├── backend/                            # API NestJS
 │   ├── src/
+│   │   ├── main.ts                     # Khởi động API, cấu hình validate đầu vào
+│   │   ├── app.module.ts               # Kết nối các module và PostgreSQL
+│   │   ├── auth/                       # Đăng nhập, JWT và phân quyền
+│   │   ├── users/                      # Đăng ký và quản lý tài khoản
+│   │   ├── products/                   # Menu, giá theo size, quản lý sản phẩm
+│   │   ├── orders/                     # Tạo đơn, lịch sử và trạng thái đơn
+│   │   ├── payments/                   # Thanh toán và Idempotency-Key
+│   │   ├── inventory/                  # Nhập, giữ và trừ tồn kho
+│   │   ├── promotions/                 # Mã giảm giá
+│   │   ├── loyalty/                    # Điểm thưởng và lịch sử điểm
+│   │   └── database/
+│   │       ├── data-source.ts          # Cấu hình TypeORM cho migration
+│   │       ├── migrations/             # Tạo và cập nhật bảng
+│   │       └── seeds/
+│   │           └── initial-data.sql   # Dữ liệu mẫu
+│   ├── test/                           # Kiểm thử end-to-end của backend
 │   ├── Dockerfile
 │   ├── .dockerignore
-│   ├── .env
+│   ├── .env.example
+│   ├── .env                            # Cấu hình trên máy local
 │   └── package.json
 │
-├── frontend/
+├── frontend/                           # Giao diện Next.js
 │   ├── app/
+│   │   ├── layout.tsx                  # Bố cục chung
+│   │   ├── page.tsx                    # Trang menu
+│   │   ├── components/
+│   │   │   └── ProductModal.tsx        # Chi tiết món, chọn size và topping
+│   │   ├── cart/page.tsx               # Giỏ hàng và tạo đơn
+│   │   ├── checkout/page.tsx           # Thanh toán và xác nhận đơn
+│   │   ├── orders/page.tsx             # Lịch sử đơn hàng
+│   │   ├── profile/page.tsx            # Tài khoản và điểm thưởng
+│   │   ├── forgot-password/page.tsx    # Quên mật khẩu
+│   │   ├── reset-password/page.tsx     # Đặt lại mật khẩu
+│   │   └── admin/
+│   │       ├── products/page.tsx       # Quản lý sản phẩm
+│   │       └── inventory/page.tsx      # Quản lý tồn kho
 │   ├── store/
-│   ├── public/
+│   │   └── useCartStore.ts             # Trạng thái giỏ hàng bằng Zustand
+│   ├── public/                         # Tài nguyên tĩnh
 │   ├── Dockerfile
 │   ├── .dockerignore
 │   └── package.json
 │
-├── docker-compose.yml
-└── README.md
+├── mock-bank/                          # Dịch vụ thanh toán mô phỏng
+│   ├── src/
+│   │   ├── main.ts                     # Khởi động dịch vụ ở cổng 3002
+│   │   ├── app.module.ts
+│   │   └── payments/                   # Xử lý giao dịch mô phỏng
+│   ├── Dockerfile
+│   ├── .dockerignore
+│   ├── .env.example
+│   └── package.json
+│
+├── scripts/
+│   └── setup-db.ps1                    # Chạy migration và nạp dữ liệu mẫu
+├── docker-compose.yml                  # Chạy PostgreSQL, backend và frontend
+└── README.md                           # Hướng dẫn cài đặt và chạy dự án
 ```
 
 ## 4. Cấu hình môi trường
